@@ -127,6 +127,7 @@ motifs, variants, structures). Add `--format` for more:
 famscan workflow family --format all   ...   # md + xlsx + pdf
 famscan workflow family --format excel ...   # md + xlsx
 famscan search -q a.faa -t b.faa --format pdf ...
+famscan export out/my_run --format xlsx,pdf      # convert a finished run
 ```
 
 - **xlsx**: a Summary sheet, a Results sheet (one row per protein, frozen header

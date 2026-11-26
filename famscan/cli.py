@@ -5,6 +5,7 @@
   famscan workflow NAME --set k=v ...   run a workflow without questions
   famscan search -q Q -t T [-p blastx]  one homology search, any direction
   famscan run ...                       classic family pipeline (v0.1 options)
+  famscan export DIR                    add Excel/PDF to a finished run
 
 Add --format md,xlsx,pdf (or all) to any run for Excel and PDF reports.
 """
@@ -13,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from .pipeline import Config, DEFAULT_RULES, run
 
@@ -71,7 +73,17 @@ def main(argv=None):
     r.add_argument("--cpus", type=int, default=0)
     r.add_argument("--out", default="famscan_out")
     r.add_argument("--format", default="md", help="md, xlsx, pdf, comma separated, or all")
+
+    x = sub.add_parser("export", help="write report.xlsx / report.pdf for a finished run")
+    x.add_argument("dir", help="output folder of an earlier run (must contain report.md)")
+    x.add_argument("--format", default="xlsx,pdf", help="md, xlsx, pdf, comma separated, or all")
     a = p.parse_args(argv)
+    if getattr(a, "format", None):
+        from .export import parse_formats
+        try:
+            parse_formats(a.format)
+        except ValueError as e:
+            sys.exit(f"famscan: {e}")
 
     if a.cmd == "start":
         from .interactive import main as interactive
@@ -93,6 +105,11 @@ def main(argv=None):
             params[k] = v.split() if k == "proteomes" else _coerce(v)
         params.setdefault("formats", a.format)
         run_workflow(a.name, params, a.out)
+    elif a.cmd == "export":
+        from .export import export
+        if not (Path(a.dir) / "report.md").exists():
+            sys.exit(f"famscan: {a.dir}/report.md not found - give the --out folder of an earlier run")
+        export(a.dir, a.format)
     elif a.cmd == "search":
         from .workflows import run_workflow
         run_workflow("search", {"query": a.query, "target": a.target, "program": a.program,
