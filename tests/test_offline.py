@@ -301,3 +301,15 @@ def test_hint_matches_how_it_was_started(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["/x/famscan/cli.py"])
     monkeypatch.setattr(sys, "executable", r".venv\Scripts\python.exe")
     assert _how_invoked().endswith("-m famscan.cli")
+
+
+def test_windows_hint_prefers_the_launcher(monkeypatch, tmp_path):
+    """On Windows the .cmd launcher is the only form that always works."""
+    from famscan import cli
+
+    monkeypatch.setattr(cli.os, "name", "nt")
+    monkeypatch.setattr(cli, "__file__", str(tmp_path / "famscan" / "cli.py"))
+    (tmp_path / "famscan").mkdir()
+    (tmp_path / "famscan.cmd").write_text("@echo off\n")
+    monkeypatch.chdir(tmp_path)
+    assert cli._how_invoked() == r".\famscan"

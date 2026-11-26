@@ -140,8 +140,12 @@ def _demo_data() -> Path | None:
 
 def _how_invoked() -> str:
     """How the user started famscan, so printed hints are commands they can paste.
-    On Windows `famscan` is often unavailable (no PATH, or blocked), and they run
-    `.venv\\Scripts\\python -m famscan.cli` instead."""
+    On Windows `famscan` is often unavailable (no PATH, or blocked by Smart App
+    Control) and activation is blocked too, so prefer the famscan.cmd launcher,
+    then the running interpreter, and only then the bare `famscan` command."""
+    launcher = Path(__file__).resolve().parent.parent / "famscan.cmd"
+    if os.name == "nt" and launcher.exists():
+        return r".\famscan" if Path.cwd() == launcher.parent else f'& "{launcher}"'
     if Path(sys.argv[0]).stem in ("famscan", "famscan-script"):
         return "famscan"
     exe = Path(sys.executable)

@@ -4,3 +4,4 @@ __pycache__/
 famscan_out/
 .venv/
 out_net/
+demo_out/
