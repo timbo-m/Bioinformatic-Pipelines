@@ -40,24 +40,30 @@ famscan start                                         # then your own data
 no other programs, so a tester can see real output before deciding whether to
 set anything up. `famscan list` shows every workflow and the inputs it needs.
 
-Needs Python 3.10 or newer. Tested on Linux and Windows 11.
+Needs Python 3.10-3.12 (**not 3.13+ on Windows**: `tmtools` has no Windows build
+for it and the install fails). Tested from a fresh clone on Linux and Windows 11.
 
 <details>
 <summary>If something goes wrong (notes from real installs)</summary>
 
-- **Windows and `tmtools`**: it only has Windows builds up to Python 3.12, so use
-  3.12 there, or skip it (`pip install -e . --no-deps` then install the rest) if
-  you don't need TM-score comparisons.
-- **Windows Smart App Control** may block some compiled packages or the
-  `famscan.exe` shim. Run `python -m famscan.cli ...` instead of `famscan ...`,
-  and pin `pyhmmer==0.12.2` if its wheel is blocked. Don't turn the setting off.
+- **"An Application Control policy has blocked this file"** on Windows 11: Smart
+  App Control blocks recently released compiled files. Fix, verified on a fresh
+  install: `pip install pyhmmer==0.12.2 scoring-matrices==0.3.4`. Don't turn the
+  security setting off.
+- **`famscan` itself blocked** for the same reason: `python -m famscan.cli ...`
+  does exactly the same thing.
+- **Install fails on Windows with Python 3.13+**: that's `tmtools`, which only
+  has Windows builds up to 3.12. Use 3.12, or install without it
+  (`pip install -e . --no-deps`, then the other dependencies) if you don't need
+  TM-score fold comparisons.
 - **`famscan: command not found`**: the virtual environment isn't active, or use
   `python -m famscan.cli`.
 - **A web service is unreachable**: that's expected on a locked-down network. The
   run continues without that step and says so; see "When a web service is down".
 
 Please report anything else as a GitHub issue, with the command you ran and the
-last few lines of output.
+last few lines of output. Attaching the run's `report.md` helps and contains no
+personal details (your contact email is written as `email: (set)`).
 </details>
 
 ## Install
