@@ -1,0 +1,13 @@
+{
+  "workflow": "search",
+  "params": {
+    "program": "blastx",
+    "engine": "builtin",
+    "evalue": 1e-05,
+    "query": "data/bmyD_gene.fna",
+    "target": "data/bacillus_proteins.faa"
+  },
+  "timings": {
+    "homology": 0.13
+  }
+}

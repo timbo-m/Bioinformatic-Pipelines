@@ -1,0 +1,19 @@
+{
+  "workflow": "unknown",
+  "params": {
+    "top_n": 10,
+    "structure": "none",
+    "foldseek_web": false,
+    "input": "data/unknown_proteins.faa",
+    "hmm_db": "data/mini_domain_library.hmm"
+  },
+  "timings": {
+    "load": 0.0,
+    "name_by_homology": 0.0,
+    "domains": 0.06,
+    "primary": 0.02,
+    "features": 0.04,
+    "motifs": 0.07,
+    "structure": 0.0
+  }
+}

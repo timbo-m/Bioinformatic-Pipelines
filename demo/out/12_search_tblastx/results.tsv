@@ -1,0 +1,2 @@
+id	target	query	evalue	score	method	description	domain_from	domain_to	query_frame	query_nt	frame	nt_start	nt_end
+ENA|CDG29762|CDG29762.1->1390.SAMEA104415756.OFHT01000022	1390.SAMEA104415756.OFHT01000022	ENA|CDG29762|CDG29762.1	3.288741657918505e-69	232.67193603515625	tblastx(phmmer)		7	316	f+1	1-1200	f+2	185567	186496

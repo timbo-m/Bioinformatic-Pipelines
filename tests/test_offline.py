@@ -1,0 +1,111 @@
+"""Offline checks: python -m pytest tests/"""
+from pathlib import Path
+
+import numpy as np
+
+from famscan import analyze, structure
+
+AA = "ACDEFGHIKLMNPQRSTVWY"
+THREE = dict(zip(AA, "ALA CYS ASP GLU PHE GLY HIS ILE LYS LEU MET ASN PRO GLN ARG SER THR VAL TRP TYR".split()))
+
+
+def _helix_pdb(path: Path, seq: str, b: float) -> Path:
+    lines = []
+    for i, aa in enumerate(seq):
+        t = np.radians(100 * i)
+        x, y, z = 2.3 * np.cos(t), 2.3 * np.sin(t), 1.5 * i
+        lines.append(f"ATOM  {i+1:5d}  CA  {THREE[aa]} A{i+1:4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00{b:6.2f}           C")
+    path.write_text("\n".join(lines) + "\nEND\n")
+    return path
+
+
+def test_protparam():
+    p = analyze.protparam("MKTAYIAKQRQISFVKSHFSRQ")
+    assert p["length"] == 22 and 9 < p["pI"] < 12
+
+
+def test_blosum_identity():
+    r = analyze.blosum_align("MKTAYIAKQRQISFVK", "MKTAYIAKQRQISFVK")
+    assert r.identity == 100 and r.coverage == 100
+
+
+def test_structure_helpers(tmp_path):
+    seq = "MKTAYIAKQRQISFVKSHFSRQLEERLG"
+    a = _helix_pdb(tmp_path / "a.pdb", seq, 0.85)   # ESMFold-style 0-1 pLDDT
+    assert structure.plddt(a) == 85.0
+    assert structure.tm_score(a, a)["tm_score"] > 0.99
+
+
+def test_uniprot_parse():
+    assert structure.uniprot_accession("sp|P0A9T0|SERA_ECOLI") == "P0A9T0"
+    assert structure.uniprot_accession("938293.PRJEB85.HG003685_328") is None
+
+
+# ----------------------------------------------------------- v0.2 additions
+DATA = Path(__file__).resolve().parents[1] / "demo" / "data"
+
+
+def test_six_frame_coordinates():
+    from famscan import seqio
+    nt = "ATG" + "GCT" * 40 + "TAA"
+    pep = seqio.six_frame({"x": nt}, min_len=30)
+    k = next(k for k in pep if "|f+1|" in k)
+    assert pep[k].startswith("MAAA") and k.endswith("|1-123")
+
+
+def test_all_blast_directions():
+    from famscan import search
+    cases = {
+        "blastp": (DATA / "luxC_reference.faa", DATA / "luxC_homologs.faa"),
+        "blastn": (DATA / "bmyD_gene.fna", DATA / "bacillus_contig.fna"),
+        "blastx": (DATA / "bmyD_gene.fna", DATA / "bacillus_proteins.faa"),
+        "tblastn": (DATA / "bmyD_protein.faa", DATA / "bacillus_contig.fna"),
+        "tblastx": (DATA / "bmyD_gene.fna", DATA / "bacillus_contig.fna"),
+    }
+    for prog, (q, t) in cases.items():
+        hits = search.homology_search(str(q), str(t), program=prog)
+        assert hits, prog
+    # translated hits map back to the same genome locus
+    tn = search.homology_search(str(cases["tblastn"][0]), str(cases["tblastn"][1]), program="tblastn")[0]
+    bn = search.homology_search(str(cases["blastn"][0]), str(cases["blastn"][1]), program="blastn")[0]
+    assert abs(tn.extra["nt_start"] - bn.domain_from) < 30
+
+
+def test_prosite_conversion_and_scan():
+    from famscan import motifs
+    assert motifs.prosite_to_regex("C-x(2,4)-[DE]-{P}>") == "C.{2,4}[DE][^P]$"
+    hits = motifs.scan("MAGQSGGKSTLLK")
+    assert any(h["id"] == "PS00017" for h in hits)
+
+
+def test_features_known_proteins():
+    from famscan import features
+    ompa = "MKKTAIAIAVALAGFATVAQAAPKDNTWYTGAKLGWSQYHDTGFINNNGPTHENQLGAGAFGGYQVNPYVGFEMGYDWLGRMPYKG"
+    assert features.signal_peptide(ompa)["sp_cleavage"] == 21
+    gcn4 = "MKVKQLEDKVEELLSKNYHLENEVARLKKLVGERMKQLEDKVEELLSKNYHLENEVARLKKLVGER"
+    assert features.coiled_coils(gcn4)
+    assert "H" in features.secondary_structure("AEELLKKAEELLKKAEELLKK")
+
+
+def test_msa_tree_variants():
+    from famscan import msa, seqio
+    s = seqio.read_seqs(DATA / "luxC_homologs.faa")
+    aln = msa.align(s)
+    assert len({len(v) for v in aln.values()}) == 1
+    assert msa.tree_to_newick(msa.tree(aln)).endswith(";")
+    assert msa.variant_table(aln, next(iter(aln)))
+
+
+def test_workflow_family(tmp_path):
+    from famscan.workflows import run_workflow
+    ctx = run_workflow("family", {"input": str(DATA / "proteome_938293.faa"), "query": str(DATA / "PF02826.hmm"),
+                                  "structure": "none"}, tmp_path, log=lambda *_: None)
+    assert len(ctx.focus) == 7 and (tmp_path / "report.md").exists()
+
+
+def test_workflow_genome_input(tmp_path):
+    from famscan.workflows import run_workflow
+    ctx = run_workflow("enzyme", {"input": str(DATA / "bacillus_contig.fna"),
+                                  "query": str(DATA / "Thioesterase.hmm"), "structure": "none"},
+                       tmp_path, log=lambda *_: None)
+    assert ctx.focus and len(ctx.proteins) > 200  # genes were called from DNA

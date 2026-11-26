@@ -1,0 +1,22 @@
+{
+  "workflow": "evolution",
+  "params": {
+    "evalue": 1e-05,
+    "tree_method": "nj",
+    "query": "data/PF02826.hmm",
+    "proteomes": [
+      "data/proteome_938293.faa",
+      "data/bacillus_contig.fna",
+      "data/cp040672_cds.fna"
+    ]
+  },
+  "timings": {
+    "load_many": 0.24,
+    "family_search": 0.04,
+    "primary": 0.01,
+    "features": 0.08,
+    "motifs": 0.05,
+    "msa": 0.12,
+    "tree": 0.05
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "workflow": "lab_candidates",
+  "params": {
+    "length_range": "100-600",
+    "top_n": 10,
+    "structure": "none",
+    "rules": "{\"length\":[50,3000]}",
+    "input": "out/01_family/final_candidates.faa"
+  },
+  "timings": {
+    "load": 0.04,
+    "primary": 0.01,
+    "features": 0.07,
+    "filter": 0.0,
+    "rank": 0.01,
+    "structure": 0.0
+  }
+}

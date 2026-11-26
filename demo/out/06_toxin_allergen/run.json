@@ -1,0 +1,15 @@
+{
+  "workflow": "toxin_allergen",
+  "params": {
+    "input": "data/proteome_938293.faa",
+    "toxin_db": "data/standin_screen_db.faa",
+    "allergen_db": "data/standin_screen_db.faa"
+  },
+  "timings": {
+    "load": 0.01,
+    "primary": 0.4,
+    "features": 7.11,
+    "toxin_allergen": 30.36,
+    "motifs": 0.07
+  }
+}

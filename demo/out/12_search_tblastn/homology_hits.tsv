@@ -1,0 +1,2 @@
+target	query	evalue	score	method	description	domain_from	domain_to	frame	nt_start	nt_end
+1390.SAMEA104415756.OFHT01000022	ENA|CDG29762|CDG29762.1	3.288741657918505e-69	232.67193603515625	tblastn(phmmer)		7	316	f+2	185567	186496

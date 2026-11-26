@@ -1,0 +1,13 @@
+{
+  "workflow": "search",
+  "params": {
+    "program": "tblastn",
+    "engine": "builtin",
+    "evalue": 1e-05,
+    "query": "data/bmyD_protein.faa",
+    "target": "data/bacillus_contig.fna"
+  },
+  "timings": {
+    "homology": 0.27
+  }
+}

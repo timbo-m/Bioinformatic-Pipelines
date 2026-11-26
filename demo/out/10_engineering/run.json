@@ -1,0 +1,20 @@
+{
+  "workflow": "engineering",
+  "params": {
+    "cluster_identity": 95,
+    "min_variant_freq": 0.15,
+    "evalue": 1e-05,
+    "reference": "data/luxC_reference.faa",
+    "input": "data/luxC_homologs.faa",
+    "query": "data/luxC_reference.faa",
+    "reference_id": "sp|P19841|LUXC_PHOPO"
+  },
+  "timings": {
+    "load": 0.0,
+    "family_search": 0.19,
+    "cluster": 0.04,
+    "msa": 0.11,
+    "variants": 0.01,
+    "tree": 0.11
+  }
+}

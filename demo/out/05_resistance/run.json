@@ -1,0 +1,14 @@
+{
+  "workflow": "resistance",
+  "params": {
+    "strict_identity": 80,
+    "input": "data/bacillus_contig.fna",
+    "resistance_db": "data/standin_screen_db.faa"
+  },
+  "timings": {
+    "load": 0.25,
+    "resistance": 2.36,
+    "primary": 0.01,
+    "features": 0.02
+  }
+}

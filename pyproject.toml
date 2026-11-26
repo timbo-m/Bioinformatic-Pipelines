@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "famscan"
+version = "0.2.0"
+description = "Genome/proteome protein family discovery with property filtering and structure confirmation"
+requires-python = ">=3.10"
+dependencies = ["biopython>=1.83", "pyhmmer>=0.10", "pyrodigal>=3", "pyfamsa>=0.4", "pandas>=2", "numpy", "requests", "tmtools"]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0"]
+
+[project.scripts]
+famscan = "famscan.cli:main"
+
+[tool.setuptools]
+packages = ["famscan"]

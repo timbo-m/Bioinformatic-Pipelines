@@ -1,0 +1,19 @@
+{
+  "workflow": "drug_target",
+  "params": {
+    "top_n": 10,
+    "structure": "none",
+    "input": "data/proteome_938293.faa",
+    "host": "data/bacillus_proteins.faa",
+    "hmm_db": "data/mini_domain_library.hmm"
+  },
+  "timings": {
+    "load": 0.1,
+    "subtract_host": 16.48,
+    "domains": 0.11,
+    "primary": 0.31,
+    "features": 5.71,
+    "structure": 0.0,
+    "rank": 0.16
+  }
+}

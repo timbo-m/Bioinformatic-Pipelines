@@ -1,0 +1,16 @@
+{
+  "workflow": "annotate",
+  "params": {
+    "input": "data/bacillus_contig.fna",
+    "hmm_db": "data/mini_domain_library.hmm",
+    "annotation_db": "data/reference_proteins.faa"
+  },
+  "timings": {
+    "load": 0.2,
+    "name_by_homology": 5.16,
+    "domains": 0.19,
+    "primary": 0.07,
+    "features": 1.1,
+    "motifs": 3.45
+  }
+}

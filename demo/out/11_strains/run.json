@@ -1,0 +1,16 @@
+{
+  "workflow": "strains",
+  "params": {
+    "proteomes": [
+      "data/bacillus_contig.fna",
+      "data/bacillus_contig_variant.fna"
+    ],
+    "hmm_db": "data/mini_domain_library.hmm"
+  },
+  "timings": {
+    "load_many": 0.34,
+    "strain_compare": 31.2,
+    "domains": 0.08,
+    "features": 0.04
+  }
+}

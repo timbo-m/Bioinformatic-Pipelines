@@ -1,0 +1,23 @@
+{
+  "workflow": "family",
+  "params": {
+    "rules": "{\"length\":[50,3000]}",
+    "evalue": 1e-05,
+    "top_n": 5,
+    "structure": "auto",
+    "input": "data/proteome_938293.faa",
+    "query": "data/PF02826.hmm",
+    "hmm_db": "data/mini_domain_library.hmm"
+  },
+  "timings": {
+    "load": 0.04,
+    "family_search": 0.04,
+    "domains": 0.08,
+    "primary": 0.01,
+    "features": 0.05,
+    "motifs": 0.05,
+    "compare_refs": 0.02,
+    "filter": 0.0,
+    "structure": 0.91
+  }
+}

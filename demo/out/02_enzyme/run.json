@@ -1,0 +1,29 @@
+{
+  "workflow": "enzyme",
+  "params": {
+    "rules": "{\"length\":[50,3000]}",
+    "cluster_identity": 90,
+    "evalue": 1e-05,
+    "top_n": 10,
+    "structure": "none",
+    "input": "data/bacillus_contig.fna",
+    "query": "data/Thioesterase.hmm",
+    "hmm_db": "data/mini_domain_library.hmm",
+    "motifs": "thioesterase_nucleophile=G-x-S-x-G"
+  },
+  "timings": {
+    "load": 0.2,
+    "family_search": 0.03,
+    "domains": 0.03,
+    "primary": 0.01,
+    "features": 0.02,
+    "motifs": 0.01,
+    "compare_refs": 0.02,
+    "filter": 0.0,
+    "cluster": 0.0,
+    "msa": 0.0,
+    "tree": 0.0,
+    "structure": 0.0,
+    "rank": 0.0
+  }
+}
