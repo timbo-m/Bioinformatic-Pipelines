@@ -79,6 +79,41 @@ def _poll(status, done, failed, timeout: float, interval: float, service: str, j
 
 
 # ------------------------------------------------------------------- EBI
+class JobRejected(ValueError):
+    """The service refused the job because of its parameters (not an outage)."""
+
+
+# EBI's NCBI-BLAST only accepts these values (anything else -> HTTP 400 "Invalid parameters")
+EBI_EXP = ("1e-200", "1e-100", "1e-50", "1e-10", "1e-5", "1e-4", "1e-3", "1e-2", "1e-1", "1.0", "10", "100", "1000")
+EBI_ALIGNMENTS = (5, 10, 20, 50, 100, 150, 200, 250, 500, 750, 1000)
+
+
+def _ebi_exp(evalue: float) -> str:
+    """The largest allowed E-value threshold that is no looser than `evalue`
+    (1e-05 -> '1e-5', 1e-6 -> '1e-10'), so we never report weaker hits than asked."""
+    ok = [v for v in EBI_EXP if float(v) <= evalue * (1 + 1e-9)]
+    return ok[-1] if ok else EBI_EXP[0]
+
+
+def _ebi_count(n: int) -> int:
+    return min(EBI_ALIGNMENTS, key=lambda v: (abs(v - n), v))
+
+
+def _ebi_job_id(r: requests.Response) -> str:
+    """The job id from a /run reply, or JobRejected with EBI's own explanation.
+    (Before, an error reply was taken as the job id and polled until the time limit.)"""
+    import re
+    text = r.text.strip()
+    if r.status_code == 200 and re.fullmatch(r"[A-Za-z0-9_.-]+-R\d{8}-[A-Za-z0-9_.-]+", text):
+        return text
+    if r.status_code >= 500:
+        raise ServiceUnavailable(f"EBI server unavailable (HTTP {r.status_code}). Try later, another engine, "
+                                 f"or a local database (famscan fetchdb swissprot).")
+    why = re.search(r"<description>(.*?)</description>", text, re.S)
+    why = " ".join((why.group(1) if why else text[:300]).split())
+    raise JobRejected(f"EBI rejected the search (HTTP {r.status_code}): {why}")
+
+
 def ebi_blast(sequence: str, program: str = "blastp", database: str = "uniprotkb_swissprot",
               email: str | None = None, evalue: float = 1e-5, hitlist_size: int = 100,
               timeout: float = 900, log=print) -> list[dict]:
@@ -88,9 +123,11 @@ def ebi_blast(sequence: str, program: str = "blastp", database: str = "uniprotkb
         raise ValueError("the EBI requires a contact email for its BLAST service: pass email=...")
     stype = "dna" if program in ("blastn", "tblastx") else "protein"
     data = {"email": email, "program": program, "stype": stype, "database": database,
-            "sequence": sequence, "exp": str(evalue), "alignments": str(hitlist_size),
-            "scores": str(hitlist_size)}
-    job_id = _get("POST", f"{EBI}/run", "EBI", data=data, timeout=60).text.strip()
+            "sequence": sequence, "exp": _ebi_exp(evalue), "alignments": str(_ebi_count(hitlist_size)),
+            "scores": str(_ebi_count(hitlist_size))}
+    if data["exp"] != f"{evalue:g}".replace("e-0", "e-"):
+        log(f"      ebi: E-value {evalue:g} sent as {data['exp']} (EBI accepts a fixed set of thresholds)")
+    job_id = _ebi_job_id(_get("POST", f"{EBI}/run", "EBI", data=data, timeout=60))
     log(f"      ebi: submitted {job_id}")
     _poll(lambda: _get("GET", f"{EBI}/status/{job_id}", "EBI", timeout=30).text.strip(),
           {"FINISHED"}, {"FAILURE", "ERROR", "NOT_FOUND"}, timeout, 5, "ebi", job_id, log)

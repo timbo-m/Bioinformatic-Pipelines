@@ -91,6 +91,7 @@ class Ctx:
         `famscan start`), "skip" (carry on, the default for scripts) or "stop".
         """
         policy = str(self.p("on_service_down", "ask" if self.ask else "skip"))
+        error = _plain_error(error)
         msg = f"{service} is not available: {str(error).strip()}"
         self.log(f"      {msg}")
         self.outages.append({"stage": stage, "service": service, "detail": str(error).strip(),
@@ -567,6 +568,30 @@ def st_toxin(ctx: Ctx):
     ctx.section("Toxins and allergens", "\n\n".join(text))
 
 
+def _plain_error(e: Exception) -> Exception:
+    """Swap requests' long connection-pool messages for one plain sentence."""
+    import requests
+    from urllib.parse import urlparse
+    url = getattr(getattr(e, "request", None), "url", "") or ""
+    host = urlparse(url).hostname or "the site"
+    if isinstance(e, requests.ConnectionError):
+        return RuntimeError(f"could not connect to {host} (the site is down, or no internet connection)")
+    if isinstance(e, requests.Timeout):
+        return RuntimeError(f"{host} did not answer in time")
+    if isinstance(e, ValueError) and not isinstance(e, requests.RequestException):
+        return RuntimeError("the site sent back an error page instead of results")
+    return e
+
+
+def _is_outage(e: Exception) -> bool:
+    """Connection failure, time-out, 5xx/429, or an HTML error page instead of JSON."""
+    import requests
+    if isinstance(e, (requests.ConnectionError, requests.Timeout, ValueError)):  # JSONDecodeError is a ValueError
+        return True
+    resp = getattr(e, "response", None)
+    return resp is not None and (resp.status_code >= 500 or resp.status_code == 429)
+
+
 @stage("structure", "Tertiary structure for top hits (AlphaFold DB / ESMFold / your PDBs), pLDDT, TM-score, disulfides")
 def st_structure(ctx: Ctx):
     method = ctx.p("structure", "auto")
@@ -579,6 +604,7 @@ def st_structure(ctx: Ctx):
     top = list(t.sort_values(key, ascending=False).index[:n]) if key else ctx.focus[:n]
     ref_pdb = ctx.p("reference_pdb")
     rows, ok = {}, 0
+    foldseek_down = False
     for i in top:
         pdb, src = structure.get_structure(i, ctx.proteins[i], ctx.out / "structures",
                                            Path(ctx.p("pdb_dir")) if ctx.p("pdb_dir") else None, method,
@@ -599,12 +625,17 @@ def st_structure(ctx: Ctx):
                      disulfides=";".join(f"C{a}-C{b}" for a, b in features.disulfides_from_structure(pdb)))
             if ref_pdb:
                 r.update(structure.tm_score(pdb, Path(ref_pdb)))
-            if ctx.p("foldseek_web"):
+            if ctx.p("foldseek_web") and not foldseek_down:
                 try:
                     fs = structure.foldseek_web(pdb)
                     r["foldseek_top"] = fs[0]["target"] if fs else ""
                 except Exception as e:  # noqa: BLE001
-                    ctx.log(f"      foldseek failed: {str(e)[:100]}")
+                    if _is_outage(e):  # the site, not this protein: report once, ask, stop calling it
+                        foldseek_down = True
+                        ctx.service_down("Foldseek", "structure", e, "compare structures with known folds "
+                                         "(foldseek_top)")
+                    else:
+                        ctx.log(f"      foldseek failed: {str(e)[:100]}")
         rows[i] = r
     ctx.add(rows)
     plddt_min, tm_min = float(ctx.p("plddt_min", 70)), float(ctx.p("tm_min", 0.5))
@@ -832,18 +863,28 @@ def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=pr
     return ctx
 
 
+PRIVATE_PARAMS = ("email",)  # personal details: used for the run, never written to its outputs
+
+
+def public_params(params: dict) -> dict:
+    """Parameters safe to write into run.json / report.md / report.xlsx / report.pdf,
+    which people share and sometimes commit."""
+    return {k: ("(set)" if k in PRIVATE_PARAMS and v else v) for k, v in params.items()}
+
+
 def write_report(ctx: Ctx, wf: Workflow, stopped: str | None, elapsed: float):
     if len(ctx.table):
         ctx.table.reset_index().to_csv(ctx.out / "results.tsv", sep="\t", index=False)
         ctx.files.insert(0, "results.tsv")
         seqio.write_fasta(ctx.seqs(), ctx.out / "final_candidates.faa")
         ctx.files.insert(1, "final_candidates.faa")
-    (ctx.out / "run.json").write_text(json.dumps({"workflow": wf.key, "params": ctx.params,
+    shown = public_params(ctx.params)
+    (ctx.out / "run.json").write_text(json.dumps({"workflow": wf.key, "params": shown,
                                                   "timings": ctx.timings, "outages": ctx.outages},
                                                  indent=2, default=str))
     lines = [f"# famscan: {wf.title}", "", f"_{wf.question}_", "",
              f"- Stages: {' -> '.join(wf.stages[:-1])}",
-             f"- Parameters: `{ {k: v for k, v in ctx.params.items() if v not in (None, '')} }`",
+             f"- Parameters: `{ {k: v for k, v in shown.items() if v not in (None, '')} }`",
              f"- Run time: {elapsed:.1f} s; final candidates: {len(ctx.focus)}"]
     if stopped:
         lines += ["", f"> **Stopped early:** {stopped}"]

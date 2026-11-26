@@ -238,3 +238,53 @@ def test_email_config(tmp_path, monkeypatch):
     assert config.email() == "a@b.org"
     assert config.email("other@c.org") == "other@c.org"      # explicit wins
     assert not config.valid_email("nope")
+
+
+def test_contact_email_never_written_to_outputs(tmp_path):
+    import openpyxl
+    from famscan.workflows import run_workflow
+    addr = "someone@example.org"
+    run_workflow("family", {"input": str(DATA / "proteome_938293.faa"), "query": str(DATA / "PF02826.hmm"),
+                            "structure": "none", "email": addr, "formats": "md,xlsx"}, tmp_path, log=lambda *_: None)
+    for f in ("report.md", "run.json"):
+        assert addr not in (tmp_path / f).read_text(), f
+    wb = openpyxl.load_workbook(tmp_path / "report.xlsx")
+    assert not any(addr in str(c.value) for ws in wb for row in ws.iter_rows() for c in row)
+
+
+def test_foldseek_outage_asked_once_and_run_continues(tmp_path, monkeypatch):
+    import requests
+    from famscan import structure
+    from famscan.workflows import run_workflow
+
+    def down(*a, **k):
+        raise requests.ConnectionError("simulated")
+    pdb = tmp_path / "model.pdb"
+    pdb.write_text("ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 90.00           C\nEND\n")
+    monkeypatch.setattr(structure, "get_structure", lambda *a, **k: (pdb, "provided"))
+    monkeypatch.setattr(structure, "foldseek_web", down)
+    asked = []
+    ctx = run_workflow("family", {"input": str(DATA / "luxC_homologs.faa"), "query": str(DATA / "luxC_reference.faa"),
+                                  "structure": "auto", "foldseek_web": True, "top_n": 3, "on_service_down": "ask"},
+                       tmp_path / "out", ask=lambda q: asked.append(q) or True, log=lambda *_: None)
+    report = (tmp_path / "out" / "report.md").read_text()
+    assert len(asked) == 1 and "## Foldseek unavailable" in report and "Stopped early" not in report
+    assert ctx.table["structure_source"].eq("provided").sum() == 3   # structures kept, only Foldseek missing
+
+
+def test_ebi_parameters_and_rejection():
+    import requests
+    from famscan import remote
+    assert remote._ebi_exp(1e-5) == "1e-5" and remote._ebi_exp(1e-6) == "1e-10" and remote._ebi_exp(0.05) == "1e-2"
+    assert remote._ebi_count(100) == 100 and remote._ebi_count(30) == 20
+
+    def reply(code, text):
+        r = requests.Response()
+        r.status_code, r._content = code, text.encode()
+        return r
+    assert remote._ebi_job_id(reply(200, "ncbiblast-R20261126-120106-0612-42945815-p1m\n")).startswith("ncbiblast-")
+    bad = reply(400, "<error>\n <description>Invalid parameters: exp is not valid</description>\n</error>")
+    with pytest.raises(remote.JobRejected, match="Invalid parameters: exp is not valid"):
+        remote._ebi_job_id(bad)       # used to be taken as the job id and polled for 15 minutes
+    with pytest.raises(remote.ServiceUnavailable):
+        remote._ebi_job_id(reply(503, "<html>down</html>"))

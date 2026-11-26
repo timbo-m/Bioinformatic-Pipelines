@@ -32,6 +32,20 @@ def _coerce(v: str):
     return v
 
 
+def _terminal_ask():
+    """A yes/no prompt when someone is at the keyboard, else None (scripts never block).
+    Lets on_service_down=ask work from the command line, not only in `famscan start`."""
+    if not (sys.stdin and sys.stdin.isatty()):
+        return None
+
+    def ask(question: str) -> bool:
+        try:
+            return input(f"{question} [Y/n]: ").strip().lower() in ("", "y", "yes")
+        except (EOFError, KeyboardInterrupt):
+            return False
+    return ask
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="famscan", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -102,10 +116,10 @@ def main(argv=None):
             parse_formats(a.format)
         except ValueError as e:
             sys.exit(f"famscan: {e}")
-    from .remote import SearchTimeout, ServiceUnavailable
+    from .remote import JobRejected, SearchTimeout, ServiceUnavailable
     try:
         _dispatch(a)
-    except (SearchTimeout, ServiceUnavailable) as e:  # web-service trouble: one clear line
+    except (SearchTimeout, ServiceUnavailable, JobRejected) as e:  # web-service trouble: one clear line
         sys.exit(f"famscan: {e}")
 
 
@@ -129,7 +143,7 @@ def _dispatch(a):
             k, v = kv.split("=", 1)
             params[k] = v.split() if k == "proteomes" else _coerce(v)
         params.setdefault("formats", a.format)
-        run_workflow(a.name, params, a.out)
+        run_workflow(a.name, params, a.out, ask=_terminal_ask())
     elif a.cmd == "config":
         from . import config
         if a.email and not config.valid_email(a.email):
@@ -164,7 +178,7 @@ def _dispatch(a):
         run_workflow("search", {"query": a.query, "target": a.target, "program": a.program,
                                 "engine": a.engine, "evalue": a.evalue, "email": a.email,
                                 "timeout": a.timeout, "on_service_down": a.on_service_down,
-                                "formats": a.format}, a.out)
+                                "formats": a.format}, a.out, ask=_terminal_ask())
     else:
         cfg = Config(query=a.query, proteome=a.proteome or a.seqs, blast_db=a.blast_db,
                      remote_db=a.remote_db, references=a.references, reference_pdb=a.reference_pdb,
