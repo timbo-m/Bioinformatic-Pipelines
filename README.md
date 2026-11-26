@@ -128,7 +128,8 @@ heavy users get blocked), and breaks when the page changes.
 |---|---|
 | 1-20 queries | a web service: `-e ncbi` (official URL API), `-e ebi` (separate queue, usually quicker; the EBI requires a contact email, which
 famscan asks for and can save with `famscan config --email you@example.org` - it
-is kept on your computer only and never committed) or `-e mmseqs` (seconds per query) |
+is kept on your computer only, never committed, and written to reports as
+`email: (set)` so sharing a report or spreadsheet does not share your address) or `-e mmseqs` (seconds per query) |
 | many queries or whole proteomes | `famscan fetchdb swissprot` once, then search locally with the built-in engine, BLAST+ or DIAMOND |
 
 Every web service call has a time limit (`--set timeout=900` by default) and
