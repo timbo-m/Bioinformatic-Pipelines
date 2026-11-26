@@ -5,6 +5,8 @@
   famscan workflow NAME --set k=v ...   run a workflow without questions
   famscan search -q Q -t T [-p blastx]  one homology search, any direction
   famscan run ...                       classic family pipeline (v0.1 options)
+
+Add --format md,xlsx,pdf (or all) to any run for Excel and PDF reports.
 """
 from __future__ import annotations
 
@@ -37,6 +39,7 @@ def main(argv=None):
     w.add_argument("name")
     w.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     w.add_argument("--out", default="famscan_out")
+    w.add_argument("--format", default="md", help="md, xlsx, pdf, comma separated, or all")
     h = sub.add_parser("search", help="homology search in any BLAST direction")
     h.add_argument("-q", "--query", required=True)
     h.add_argument("-t", "--target", required=True)
@@ -45,6 +48,7 @@ def main(argv=None):
     h.add_argument("-e", "--engine", default="builtin", choices=["builtin", "blast+", "diamond", "ncbi"])
     h.add_argument("--evalue", type=float, default=1e-5)
     h.add_argument("--out", default="famscan_out")
+    h.add_argument("--format", default="md", help="md, xlsx, pdf, comma separated, or all")
 
     r = sub.add_parser("run", help="classic family pipeline")
     r.add_argument("--query", required=True, help="HMM file, Pfam accession or query FASTA")
@@ -66,6 +70,7 @@ def main(argv=None):
     r.add_argument("--tm-min", type=float, default=0.5)
     r.add_argument("--cpus", type=int, default=0)
     r.add_argument("--out", default="famscan_out")
+    r.add_argument("--format", default="md", help="md, xlsx, pdf, comma separated, or all")
     a = p.parse_args(argv)
 
     if a.cmd == "start":
@@ -86,11 +91,12 @@ def main(argv=None):
         for kv in a.set:
             k, v = kv.split("=", 1)
             params[k] = v.split() if k == "proteomes" else _coerce(v)
+        params.setdefault("formats", a.format)
         run_workflow(a.name, params, a.out)
     elif a.cmd == "search":
         from .workflows import run_workflow
         run_workflow("search", {"query": a.query, "target": a.target, "program": a.program,
-                                "engine": a.engine, "evalue": a.evalue}, a.out)
+                                "engine": a.engine, "evalue": a.evalue, "formats": a.format}, a.out)
     else:
         cfg = Config(query=a.query, proteome=a.proteome or a.seqs, blast_db=a.blast_db,
                      remote_db=a.remote_db, references=a.references, reference_pdb=a.reference_pdb,
@@ -99,6 +105,8 @@ def main(argv=None):
                      foldseek_db=a.foldseek_db, foldseek_web=a.foldseek_web,
                      plddt_min=a.plddt_min, tm_min=a.tm_min, cpus=a.cpus, out=a.out)
         run(cfg)
+        from .export import export
+        export(a.out, a.format)
 
 
 if __name__ == "__main__":

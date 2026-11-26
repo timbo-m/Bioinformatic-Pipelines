@@ -738,7 +738,10 @@ WORKFLOWS: dict[str, Workflow] = {w.key: w for w in [
 
 # ===================================================================== runner
 def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=print) -> Ctx:
+    """Run workflow `key`. params["formats"] = "md", "xlsx", "pdf", a comma list or "all"."""
     wf = WORKFLOWS[key]
+    from .export import parse_formats
+    parse_formats(params.get("formats"))  # fail fast on a typo
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     missing = [p.name for p in wf.params if p.required and not params.get(p.name)]
@@ -764,6 +767,8 @@ def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=pr
             break
         ctx.timings[name] = round(time.time() - t, 2)
     write_report(ctx, wf, stopped, time.time() - t0)
+    from .export import export
+    export(out, ctx.p("formats", "md"), log=log)
     log(f"done in {time.time() - t0:.1f}s -> {out}/report.md")
     return ctx
 

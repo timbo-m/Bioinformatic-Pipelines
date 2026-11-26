@@ -109,3 +109,14 @@ def test_workflow_genome_input(tmp_path):
                                   "query": str(DATA / "Thioesterase.hmm"), "structure": "none"},
                        tmp_path, log=lambda *_: None)
     assert ctx.focus and len(ctx.proteins) > 200  # genes were called from DNA
+
+
+def test_export_formats(tmp_path):
+    from famscan.export import parse_formats
+    from famscan.workflows import run_workflow
+    assert parse_formats("excel") == ["md", "xlsx"]
+    assert parse_formats("all") == ["md", "xlsx", "pdf"]
+    run_workflow("family", {"input": str(DATA / "proteome_938293.faa"), "query": str(DATA / "PF02826.hmm"),
+                            "structure": "none", "formats": "all"}, tmp_path, log=lambda *_: None)
+    for name in ("report.md", "report.xlsx", "report.pdf"):
+        assert (tmp_path / name).stat().st_size > 1000

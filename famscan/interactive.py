@@ -73,6 +73,14 @@ def main(out_default: str = "famscan_out"):
         if v is not None:
             params[p.name] = v
     out = _ask("Output folder", out_default)
+    while True:
+        fmt = _ask("Report formats: md, xlsx (Excel), pdf - comma separated, or all", "md")
+        try:
+            from .export import parse_formats
+            params["formats"] = ",".join(parse_formats(fmt))
+            break
+        except ValueError as e:
+            print(f"    {e}")
     cmd = ["famscan", "workflow", wf.key, "--out", out] + [
         x for k, v in params.items() for x in ("--set", f"{k}={' '.join(v) if isinstance(v, list) else v}")]
     print("\nTo rerun without questions:\n  " + " ".join(shlex.quote(c) for c in cmd) + "\n")

@@ -15,6 +15,8 @@ description: Guided bioinformatics pipelines. Use for protein family searches, e
    - a few queries against NCBI nr/swissprot: `engine=ncbi`. Never automate the
      NCBI web form; the official API allows about 1 request every 10 s.
 4. Run `famscan workflow <name> --out <dir> --set key=value ...` and read `<dir>/report.md`.
+   Add `--format excel`, `--format pdf` or `--format all` when the user wants a
+   spreadsheet or a PDF alongside the Markdown report.
 5. Summarise for the user: counts at each stage, the final candidates and why they
    rank highly, and anything stopped or skipped (for example, structures that need network access).
 6. Point out the sequence-only heuristics (signal peptide, TM, disorder, coiled coil,

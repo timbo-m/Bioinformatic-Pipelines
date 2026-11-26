@@ -117,9 +117,23 @@ famscan workflow drug_target --set input=pathogen.faa --set host=human.faa --set
 famscan workflow evolution --set query=PF02826 --set "proteomes=sp1.faa sp2.faa sp3.fna"
 ```
 
-Every run writes `report.md`, `results.tsv` (one row per protein, every
-computed column), `final_candidates.faa`, plus stage files (alignment,
-tree, domains, motifs, variants, structures).
+## Output formats
+
+Every run writes `report.md`, `results.tsv` (one row per protein, every computed
+column), `final_candidates.faa`, plus stage files (alignment, tree, domains,
+motifs, variants, structures). Add `--format` for more:
+
+```bash
+famscan workflow family --format all   ...   # md + xlsx + pdf
+famscan workflow family --format excel ...   # md + xlsx
+famscan search -q a.faa -t b.faa --format pdf ...
+```
+
+- **xlsx**: a Summary sheet, a Results sheet (one row per protein, frozen header
+  and filters on every column) and one sheet per stage table.
+- **pdf**: the report typeset in landscape with headings and tables.
+
+`famscan start` asks which formats you want; Markdown is always written.
 
 ## Databases you may want
 
