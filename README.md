@@ -25,6 +25,41 @@ famscan - what are you trying to do?
 It then shows the stages it will run, asks only for the inputs that workflow
 needs, prints the equivalent one-line command, and runs.
 
+## Try it in two minutes
+
+```bash
+git clone https://github.com/timbo-m/Bioinformatic-Pipelines
+cd Bioinformatic-Pipelines
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -e .
+famscan demo                                          # three worked examples, ~30 s, no network
+famscan start                                         # then your own data
+```
+
+`famscan demo` runs on the bundled data and needs no internet, no databases and
+no other programs, so a tester can see real output before deciding whether to
+set anything up. `famscan list` shows every workflow and the inputs it needs.
+
+Needs Python 3.10 or newer. Tested on Linux and Windows 11.
+
+<details>
+<summary>If something goes wrong (notes from real installs)</summary>
+
+- **Windows and `tmtools`**: it only has Windows builds up to Python 3.12, so use
+  3.12 there, or skip it (`pip install -e . --no-deps` then install the rest) if
+  you don't need TM-score comparisons.
+- **Windows Smart App Control** may block some compiled packages or the
+  `famscan.exe` shim. Run `python -m famscan.cli ...` instead of `famscan ...`,
+  and pin `pyhmmer==0.12.2` if its wheel is blocked. Don't turn the setting off.
+- **`famscan: command not found`**: the virtual environment isn't active, or use
+  `python -m famscan.cli`.
+- **A web service is unreachable**: that's expected on a locked-down network. The
+  run continues without that step and says so; see "When a web service is down".
+
+Please report anything else as a GitHub issue, with the command you ran and the
+last few lines of output.
+</details>
+
 ## Install
 
 ```bash
@@ -205,4 +240,16 @@ than real findings.
 
 ## Tests
 
-`python -m pytest tests/` (offline, about 5 s).
+`python -m pytest tests/` (24 tests, offline, about 6 s).
+
+## Status
+
+Verified end to end on Linux and Windows 11: all 12 workflows, all 5 search
+directions, Swiss-Prot download and local search, ESMFold, AlphaFold DB,
+Foldseek, TM-score and the EBI engine. The MMseqs2 web server is down at
+their end (ColabFold hardware move), so that engine is tested only against a
+simulated outage. Fast sequence-only predictors are first-pass filters, not
+substitutes for SignalP 6, DeepTMHMM, IUPred3 or PSIPRED.
+
+Contributions and bug reports welcome: please include the command and the last
+few lines of output.

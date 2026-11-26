@@ -1,5 +1,6 @@
 """famscan command line.
 
+  famscan demo                          worked examples on bundled data (start here)
   famscan start                         interactive: pick what you're doing
   famscan list                          show workflows and their inputs
   famscan workflow NAME --set k=v ...   run a workflow without questions
@@ -96,6 +97,10 @@ def main(argv=None):
     r.add_argument("--out", default="famscan_out")
     r.add_argument("--format", default="md", help="md, xlsx, pdf, comma separated, or all")
 
+    d = sub.add_parser("demo", help="run a worked example on the bundled data (offline, ~30 s)")
+    d.add_argument("--out", default="demo_out")
+    d.add_argument("--format", default="md", help="md, xlsx, pdf, comma separated, or all")
+
     c = sub.add_parser("config", help="save settings on this computer (e.g. your EBI contact email)")
     c.add_argument("--email", help="contact email for the EBI service")
     c.add_argument("--show", action="store_true", help="print the saved settings and where they live")
@@ -123,6 +128,47 @@ def main(argv=None):
         sys.exit(f"famscan: {e}")
 
 
+def _demo_data() -> Path | None:
+    """The bundled demo/data folder, when famscan is run from a clone."""
+    for base in (Path(__file__).resolve().parents[1], Path.cwd(), Path.cwd().parent):
+        d = base / "demo" / "data"
+        if (d / "PF02826.hmm").exists():
+            return d
+    return None
+
+
+def _demo(out: str, formats: str) -> None:
+    """A worked example, so a new user sees real output in half a minute."""
+    from .workflows import run_workflow
+
+    data = _demo_data()
+    if data is None:
+        sys.exit("famscan: the demo data lives in the repository. Get it with:\n"
+                 "  git clone https://github.com/timbo-m/Bioinformatic-Pipelines\n"
+                 "  cd Bioinformatic-Pipelines && famscan demo")
+    runs = [
+        ("family", {"input": str(data / "proteome_938293.faa"), "query": str(data / "PF02826.hmm"),
+                    "hmm_db": str(data / "mini_domain_library.hmm"), "structure": "none"},
+         "Find every member of a protein family (Pfam PF02826) in a 2,100-protein bacterial proteome"),
+        ("annotate", {"input": str(data / "bacillus_contig.fna"),
+                      "annotation_db": str(data / "reference_proteins.faa"),
+                      "hmm_db": str(data / "mini_domain_library.hmm")},
+         "Annotate a 391 kb genome contig from scratch: call the genes, then name and describe them"),
+        ("engineering", {"reference": str(data / "luxC_reference.faa"),
+                         "input": str(data / "luxC_homologs.faa")},
+         "Mine 12 natural homologs for mutations that might stabilise your protein"),
+    ]
+    print("famscan demo - three worked examples on the bundled data. No network needed.\n")
+    for i, (key, params, what) in enumerate(runs, 1):
+        print(f"[{i}/{len(runs)}] {what}")
+        params["formats"] = formats
+        ctx = run_workflow(key, params, f"{out}/{i}_{key}", log=lambda m: print(f"   {m.strip()}"))
+        print(f"      -> {out}/{i}_{key}/report.md ({len(ctx.focus)} candidates)\n")
+    print(f"Reports are in {out}/. Now try your own data:\n"
+          f"  famscan start          pick what you are trying to do\n"
+          f"  famscan list           every workflow and its inputs")
+
+
 def _dispatch(a):
     if a.cmd == "start":
         from .interactive import main as interactive
@@ -144,6 +190,8 @@ def _dispatch(a):
             params[k] = v.split() if k == "proteomes" else _coerce(v)
         params.setdefault("formats", a.format)
         run_workflow(a.name, params, a.out, ask=_terminal_ask())
+    elif a.cmd == "demo":
+        _demo(a.out, a.format)
     elif a.cmd == "config":
         from . import config
         if a.email and not config.valid_email(a.email):
