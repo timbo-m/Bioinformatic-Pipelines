@@ -28,11 +28,13 @@ def list_workflows() -> str:
 
 
 @mcp.tool()
-def run(workflow: str, params_json: str, out: str = "famscan_out") -> str:
+def run(workflow: str, params_json: str, out: str = "famscan_out", formats: str = "md") -> str:
     """Run a workflow. params_json maps input names to values, e.g.
-    {"input": "genome.fna", "query": "PF02826", "top_n": 5}. Returns the report."""
+    {"input": "genome.fna", "query": "PF02826", "top_n": 5}. formats: "md" (default),
+    or add "xlsx" / "pdf" (e.g. "md,xlsx,pdf" or "all") to also write report.xlsx /
+    report.pdf in the output folder. Returns the Markdown report."""
     logs: list[str] = []
-    run_workflow(workflow, json.loads(params_json), out, log=logs.append)
+    run_workflow(workflow, json.loads(params_json), out, log=logs.append, formats=formats)
     return "\n".join(logs) + "\n\n" + (Path(out) / "report.md").read_text()
 
 

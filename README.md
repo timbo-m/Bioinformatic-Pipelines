@@ -121,6 +121,19 @@ Every run writes `report.md`, `results.tsv` (one row per protein, every
 computed column), `final_candidates.faa`, plus stage files (alignment,
 tree, domains, motifs, variants, structures).
 
+Want Excel or PDF too? Add `--format`:
+
+```
+famscan workflow family --set input=proteome.faa --set query=PF02826 --format md,xlsx,pdf   # or --format all
+famscan export famscan_out --format xlsx,pdf                                                # convert an earlier run
+```
+
+`report.xlsx` has a Summary sheet (parameters + report text) and one sheet per
+table (`results`, motifs, domains, ...) with filters and frozen headers;
+`report.pdf` is the rendered report (wide tables show their first 12 columns;
+every column is in the Excel file). The interactive menu (`famscan start`)
+asks which formats you want.
+
 ## Databases you may want
 
 | For | Download |

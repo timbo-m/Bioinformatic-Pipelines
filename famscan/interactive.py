@@ -5,6 +5,7 @@ import re
 import shlex
 from pathlib import Path
 
+from .export import parse_formats
 from .workflows import STAGES, WORKFLOWS, Param, run_workflow
 
 
@@ -73,8 +74,15 @@ def main(out_default: str = "famscan_out"):
         if v is not None:
             params[p.name] = v
     out = _ask("Output folder", out_default)
-    cmd = ["famscan", "workflow", wf.key, "--out", out] + [
+    while True:
+        fmt = _ask("Report formats: md, xlsx (Excel), pdf, or all", "md")
+        try:
+            parse_formats(fmt)
+            break
+        except ValueError as e:
+            print(f"  {e}")
+    cmd = ["famscan", "workflow", wf.key, "--out", out] + (["--format", fmt] if fmt != "md" else []) + [
         x for k, v in params.items() for x in ("--set", f"{k}={' '.join(v) if isinstance(v, list) else v}")]
     print("\nTo rerun without questions:\n  " + " ".join(shlex.quote(c) for c in cmd) + "\n")
     if _ask("Run now? (y/n)", "y").lower().startswith("y"):
-        run_workflow(wf.key, params, out)
+        run_workflow(wf.key, params, out, formats=fmt)

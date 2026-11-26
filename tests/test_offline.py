@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from famscan import analyze, structure
 
@@ -109,3 +110,17 @@ def test_workflow_genome_input(tmp_path):
                                   "query": str(DATA / "Thioesterase.hmm"), "structure": "none"},
                        tmp_path, log=lambda *_: None)
     assert ctx.focus and len(ctx.proteins) > 200  # genes were called from DNA
+
+
+def test_export_formats(tmp_path):
+    import openpyxl
+    from famscan.export import parse_formats
+    from famscan.workflows import run_workflow
+    assert parse_formats("excel, PDF") == ["md", "xlsx", "pdf"] and parse_formats("all") == ["md", "xlsx", "pdf"]
+    with pytest.raises(ValueError):
+        parse_formats("docx")
+    run_workflow("family", {"input": str(DATA / "proteome_938293.faa"), "query": str(DATA / "PF02826.hmm"),
+                            "structure": "none"}, tmp_path, log=lambda *_: None, formats="md,xlsx,pdf")
+    wb = openpyxl.load_workbook(tmp_path / "report.xlsx")
+    assert wb.sheetnames[:2] == ["Summary", "results"] and wb["results"].max_row == 8  # header + 7 hits
+    assert (tmp_path / "report.pdf").read_bytes()[:5] == b"%PDF-"

@@ -5,6 +5,10 @@
   famscan workflow NAME --set k=v ...   run a workflow without questions
   famscan search -q Q -t T [-p blastx]  one homology search, any direction
   famscan run ...                       classic family pipeline (v0.1 options)
+  famscan export DIR --format xlsx,pdf  convert a finished run to Excel / PDF
+
+Every run writes report.md; add --format md,xlsx,pdf (or --format all) to also
+get report.xlsx (all tables as sheets) and report.pdf.
 """
 from __future__ import annotations
 
@@ -13,6 +17,8 @@ import json
 import sys
 
 from .pipeline import Config, DEFAULT_RULES, run
+
+FMT_HELP = "report formats, comma-separated: md, xlsx (Excel), pdf, or all (default md)"
 
 
 def _coerce(v: str):
@@ -37,6 +43,7 @@ def main(argv=None):
     w.add_argument("name")
     w.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     w.add_argument("--out", default="famscan_out")
+    w.add_argument("--format", default="md", help=FMT_HELP)
     h = sub.add_parser("search", help="homology search in any BLAST direction")
     h.add_argument("-q", "--query", required=True)
     h.add_argument("-t", "--target", required=True)
@@ -45,6 +52,7 @@ def main(argv=None):
     h.add_argument("-e", "--engine", default="builtin", choices=["builtin", "blast+", "diamond", "ncbi"])
     h.add_argument("--evalue", type=float, default=1e-5)
     h.add_argument("--out", default="famscan_out")
+    h.add_argument("--format", default="md", help=FMT_HELP)
 
     r = sub.add_parser("run", help="classic family pipeline")
     r.add_argument("--query", required=True, help="HMM file, Pfam accession or query FASTA")
@@ -66,7 +74,17 @@ def main(argv=None):
     r.add_argument("--tm-min", type=float, default=0.5)
     r.add_argument("--cpus", type=int, default=0)
     r.add_argument("--out", default="famscan_out")
+    r.add_argument("--format", default="md", help=FMT_HELP)
+    x = sub.add_parser("export", help="write report.xlsx / report.pdf for a finished run")
+    x.add_argument("dir", help="output folder of an earlier run (contains report.md)")
+    x.add_argument("--format", default="xlsx,pdf", help=FMT_HELP)
     a = p.parse_args(argv)
+    if getattr(a, "format", None):
+        from .export import parse_formats
+        try:
+            parse_formats(a.format)
+        except ValueError as e:
+            sys.exit(f"famscan: {e}")
 
     if a.cmd == "start":
         from .interactive import main as interactive
@@ -86,11 +104,14 @@ def main(argv=None):
         for kv in a.set:
             k, v = kv.split("=", 1)
             params[k] = v.split() if k == "proteomes" else _coerce(v)
-        run_workflow(a.name, params, a.out)
+        run_workflow(a.name, params, a.out, formats=a.format)
     elif a.cmd == "search":
         from .workflows import run_workflow
         run_workflow("search", {"query": a.query, "target": a.target, "program": a.program,
-                                "engine": a.engine, "evalue": a.evalue}, a.out)
+                                "engine": a.engine, "evalue": a.evalue}, a.out, formats=a.format)
+    elif a.cmd == "export":
+        from .export import export
+        export(a.dir, a.format)
     else:
         cfg = Config(query=a.query, proteome=a.proteome or a.seqs, blast_db=a.blast_db,
                      remote_db=a.remote_db, references=a.references, reference_pdb=a.reference_pdb,
@@ -98,7 +119,11 @@ def main(argv=None):
                      top_n=a.top, structure_method=a.structure, pdb_dir=a.pdb_dir,
                      foldseek_db=a.foldseek_db, foldseek_web=a.foldseek_web,
                      plddt_min=a.plddt_min, tm_min=a.tm_min, cpus=a.cpus, out=a.out)
+        from .export import export, parse_formats
+        formats = parse_formats(a.format)
         run(cfg)
+        if len(formats) > 1:
+            export(a.out, formats)
 
 
 if __name__ == "__main__":

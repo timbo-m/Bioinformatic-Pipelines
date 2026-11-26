@@ -737,7 +737,11 @@ WORKFLOWS: dict[str, Workflow] = {w.key: w for w in [
 
 
 # ===================================================================== runner
-def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=print) -> Ctx:
+def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=print,
+                 formats="md") -> Ctx:
+    """Run a workflow; ``formats`` adds report.xlsx / report.pdf (e.g. "md,xlsx,pdf" or "all")."""
+    from .export import export, parse_formats
+    formats = parse_formats(formats)  # fail fast on a typo, before the run
     wf = WORKFLOWS[key]
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -764,6 +768,8 @@ def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=pr
             break
         ctx.timings[name] = round(time.time() - t, 2)
     write_report(ctx, wf, stopped, time.time() - t0)
+    if len(formats) > 1:
+        export(out, formats, log=log)
     log(f"done in {time.time() - t0:.1f}s -> {out}/report.md")
     return ctx
 
