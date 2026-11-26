@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -164,9 +165,22 @@ def _demo(out: str, formats: str) -> None:
         params["formats"] = formats
         ctx = run_workflow(key, params, f"{out}/{i}_{key}", log=lambda m: print(f"   {m.strip()}"))
         print(f"      -> {out}/{i}_{key}/report.md ({len(ctx.focus)} candidates)\n")
+    cmd = _how_to_run()
     print(f"Reports are in {out}/. Now try your own data:\n"
-          f"  famscan start          pick what you are trying to do\n"
-          f"  famscan list           every workflow and its inputs")
+          f"  {cmd} start          pick what you are trying to do\n"
+          f"  {cmd} list           every workflow and its inputs")
+
+
+def _how_to_run() -> str:
+    """The command that actually works for this user. On Windows the `famscan`
+    exe is often blocked (Smart App Control) and venv activation is blocked by
+    PowerShell's script policy, so point at the famscan.cmd launcher instead."""
+    if os.name == "nt":
+        launcher = Path(__file__).resolve().parent.parent / "famscan.cmd"
+        if launcher.exists():
+            return r".\famscan" if Path.cwd() == launcher.parent else f'& "{launcher}"'
+        return f'& "{sys.executable}" -m famscan.cli'
+    return "famscan"
 
 
 def _dispatch(a):

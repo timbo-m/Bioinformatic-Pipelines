@@ -27,10 +27,28 @@ needs, prints the equivalent one-line command, and runs.
 
 ## Try it in two minutes
 
+**Windows** (PowerShell; no activation step, which Windows blocks by default):
+
+```powershell
+git clone https://github.com/timbo-m/Bioinformatic-Pipelines
+cd Bioinformatic-Pipelines
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -e .
+.\famscan demo        # three worked examples, ~30 s, no network
+.\famscan start       # then your own data
+```
+
+`.\famscan` is a small launcher (`famscan.cmd`) in the repo folder that uses the
+project's own Python, so it works even when `python` opens the Microsoft Store
+and `.venv\Scripts\activate` says "running scripts is disabled on this system".
+No `py` command? Install Python 3.12 from python.org first.
+
+**macOS / Linux:**
+
 ```bash
 git clone https://github.com/timbo-m/Bioinformatic-Pipelines
 cd Bioinformatic-Pipelines
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 famscan demo                                          # three worked examples, ~30 s, no network
 famscan start                                         # then your own data
@@ -50,14 +68,19 @@ for it and the install fails). Tested from a fresh clone on Linux and Windows 11
   App Control blocks recently released compiled files. Fix, verified on a fresh
   install: `pip install pyhmmer==0.12.2 scoring-matrices==0.3.4`. Don't turn the
   security setting off.
-- **`famscan` itself blocked** for the same reason: `python -m famscan.cli ...`
-  does exactly the same thing.
+- **`famscan` itself blocked** for the same reason: use the `.\famscan` launcher
+  in the repo folder, or `.venv\Scripts\python -m famscan.cli ...`.
+- **"running scripts is disabled on this system"** when activating the venv: you
+  don't need to activate it. Use `.\famscan ...` from the repo folder.
+- **"Python was not found; run without arguments to install from the Microsoft
+  Store"**: plain `python` isn't installed as a command. Use `py -3.12` to create
+  the venv and `.\famscan` afterwards; neither needs `python` on PATH.
 - **Install fails on Windows with Python 3.13+**: that's `tmtools`, which only
   has Windows builds up to 3.12. Use 3.12, or install without it
   (`pip install -e . --no-deps`, then the other dependencies) if you don't need
   TM-score fold comparisons.
-- **`famscan: command not found`**: the virtual environment isn't active, or use
-  `python -m famscan.cli`.
+- **`famscan: command not found`** (macOS/Linux): the virtual environment isn't
+  active; run `source .venv/bin/activate`, or use `python -m famscan.cli`.
 - **A web service is unreachable**: that's expected on a locked-down network. The
   run continues without that step and says so; see "When a web service is down".
 
