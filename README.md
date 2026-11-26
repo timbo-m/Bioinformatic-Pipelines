@@ -30,11 +30,27 @@ needs, prints the equivalent one-line command, and runs.
 ```bash
 git clone https://github.com/timbo-m/Bioinformatic-Pipelines
 cd Bioinformatic-Pipelines
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -e .
-famscan demo                                          # three worked examples, ~30 s, no network
-famscan start                                         # then your own data
+python -m venv .venv
 ```
+then, on **Windows**:
+```powershell
+.venv\Scripts\python -m pip install -e .
+.venv\Scripts\python -m famscan.cli demo      # three worked examples, ~30 s, no network
+.venv\Scripts\python -m famscan.cli start     # then your own data
+```
+or on **macOS / Linux**:
+```bash
+.venv/bin/pip install -e .
+.venv/bin/famscan demo
+.venv/bin/famscan start
+```
+
+Calling the virtual environment's Python directly like this needs no `activate`
+step, which is the usual way a first run goes wrong: Windows blocks PowerShell
+scripts by default, so `.venv\Scripts\activate` fails with "running scripts is
+disabled on this system" and everything after it fails too. (If you prefer to
+activate, and it is blocked, allow it for your own account with
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.)
 
 `famscan demo` runs on the bundled data and needs no internet, no databases and
 no other programs, so a tester can see real output before deciding whether to
@@ -56,8 +72,11 @@ for it and the install fails). Tested from a fresh clone on Linux and Windows 11
   has Windows builds up to 3.12. Use 3.12, or install without it
   (`pip install -e . --no-deps`, then the other dependencies) if you don't need
   TM-score fold comparisons.
-- **`famscan: command not found`**: the virtual environment isn't active, or use
-  `python -m famscan.cli`.
+- **"running scripts is disabled on this system"**: PowerShell blocks `activate`.
+  Skip it entirely and call `.venv\Scripts\python -m famscan.cli ...`, or allow
+  scripts for your account with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+- **`famscan: command not found`**: the virtual environment isn't active, so call
+  `.venv\Scripts\python -m famscan.cli ...` (Windows) or `.venv/bin/famscan ...`.
 - **A web service is unreachable**: that's expected on a locked-down network. The
   run continues without that step and says so; see "When a web service is down".
 
