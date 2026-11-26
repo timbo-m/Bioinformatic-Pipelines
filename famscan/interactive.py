@@ -178,7 +178,8 @@ def _menu(out_default: str = "famscan_out"):
             break
         except ValueError as e:
             print(f"    {e}")
-    cmd = ["famscan", "workflow", wf.key, "--out", out] + [
+    from .cli import _how_invoked
+    cmd = _how_invoked().split() + ["workflow", wf.key, "--out", out] + [
         x for k, v in params.items() for x in ("--set", f"{k}={' '.join(v) if isinstance(v, list) else v}")]
     print("\nTo rerun without questions:\n  " + " ".join(shlex.quote(c) for c in cmd) + "\n")
     if _ask("Run now? (y/n)", "y").lower().startswith("y"):

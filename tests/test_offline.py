@@ -1,4 +1,5 @@
 """Offline checks: python -m pytest tests/"""
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -288,3 +289,15 @@ def test_ebi_parameters_and_rejection():
         remote._ebi_job_id(bad)       # used to be taken as the job id and polled for 15 minutes
     with pytest.raises(remote.ServiceUnavailable):
         remote._ebi_job_id(reply(503, "<html>down</html>"))
+
+
+def test_hint_matches_how_it_was_started(monkeypatch):
+    """Printed hints must be commands the user can actually paste: on Windows
+    `famscan` is often unavailable and they use `...python -m famscan.cli`."""
+    from famscan.cli import _how_invoked
+
+    monkeypatch.setattr(sys, "argv", ["/x/bin/famscan", "demo"])
+    assert _how_invoked() == "famscan"
+    monkeypatch.setattr(sys, "argv", ["/x/famscan/cli.py"])
+    monkeypatch.setattr(sys, "executable", r".venv\Scripts\python.exe")
+    assert _how_invoked().endswith("-m famscan.cli")

@@ -859,7 +859,7 @@ def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=pr
     write_report(ctx, wf, stopped, time.time() - t0)
     from .export import export
     export(out, ctx.p("formats", "md"), log=log)
-    log(f"done in {time.time() - t0:.1f}s -> {out}/report.md")
+    log(f"done in {time.time() - t0:.1f}s -> {out / 'report.md'}")
     return ctx
 
 

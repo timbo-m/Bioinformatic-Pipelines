@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -137,6 +138,20 @@ def _demo_data() -> Path | None:
     return None
 
 
+def _how_invoked() -> str:
+    """How the user started famscan, so printed hints are commands they can paste.
+    On Windows `famscan` is often unavailable (no PATH, or blocked), and they run
+    `.venv\\Scripts\\python -m famscan.cli` instead."""
+    if Path(sys.argv[0]).stem in ("famscan", "famscan-script"):
+        return "famscan"
+    exe = Path(sys.executable)
+    try:
+        exe = exe.relative_to(Path.cwd())
+    except ValueError:
+        pass
+    return f"{exe} -m famscan.cli"
+
+
 def _demo(out: str, formats: str) -> None:
     """A worked example, so a new user sees real output in half a minute."""
     from .workflows import run_workflow
@@ -162,11 +177,13 @@ def _demo(out: str, formats: str) -> None:
     for i, (key, params, what) in enumerate(runs, 1):
         print(f"[{i}/{len(runs)}] {what}")
         params["formats"] = formats
-        ctx = run_workflow(key, params, f"{out}/{i}_{key}", log=lambda m: print(f"   {m.strip()}"))
-        print(f"      -> {out}/{i}_{key}/report.md ({len(ctx.focus)} candidates)\n")
-    print(f"Reports are in {out}/. Now try your own data:\n"
-          f"  famscan start          pick what you are trying to do\n"
-          f"  famscan list           every workflow and its inputs")
+        folder = Path(out) / f"{i}_{key}"
+        ctx = run_workflow(key, params, folder, log=lambda m: print(f"   {m.strip()}"))
+        print(f"      -> {folder / 'report.md'} ({len(ctx.focus)} candidates)\n")
+    me = _how_invoked()
+    print(f"Reports are in {Path(out)}{os.sep}. Now try your own data:\n"
+          f"  {me} start          pick what you are trying to do\n"
+          f"  {me} list           every workflow and its inputs")
 
 
 def _dispatch(a):
