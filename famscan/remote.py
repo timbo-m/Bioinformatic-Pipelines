@@ -39,6 +39,16 @@ class SearchTimeout(RuntimeError):
                          f"(famscan fetchdb swissprot) to avoid the queue.")
 
 
+def _get(method: str, url: str, service: str, **kw) -> requests.Response:
+    """One HTTP call, with an unreachable host reported as a plain outage."""
+    try:
+        return requests.request(method, url, headers=UA, **kw)
+    except requests.RequestException as e:
+        raise ServiceUnavailable(
+            f"could not reach the {service} server ({type(e).__name__}). Check your connection, "
+            f"try another engine, or search a local database (famscan fetchdb swissprot).") from None
+
+
 def _json(r: requests.Response, service: str):
     """Parse a JSON reply, turning outages (HTML error pages, 5xx) into a clear error."""
     if r.status_code >= 400 or "json" not in r.headers.get("content-type", ""):
@@ -80,11 +90,11 @@ def ebi_blast(sequence: str, program: str = "blastp", database: str = "uniprotkb
     data = {"email": email, "program": program, "stype": stype, "database": database,
             "sequence": sequence, "exp": str(evalue), "alignments": str(hitlist_size),
             "scores": str(hitlist_size)}
-    job_id = requests.post(f"{EBI}/run", data=data, timeout=60, headers=UA).text.strip()
+    job_id = _get("POST", f"{EBI}/run", "EBI", data=data, timeout=60).text.strip()
     log(f"      ebi: submitted {job_id}")
-    _poll(lambda: requests.get(f"{EBI}/status/{job_id}", timeout=30, headers=UA).text.strip(),
+    _poll(lambda: _get("GET", f"{EBI}/status/{job_id}", "EBI", timeout=30).text.strip(),
           {"FINISHED"}, {"FAILURE", "ERROR", "NOT_FOUND"}, timeout, 5, "ebi", job_id, log)
-    out = _json(requests.get(f"{EBI}/result/{job_id}/json", timeout=120, headers=UA), "EBI")
+    out = _json(_get("GET", f"{EBI}/result/{job_id}/json", "EBI", timeout=120), "EBI")
     rows = []
     for hit in out.get("hits", []):
         hsp = (hit.get("hit_hsps") or [{}])[0]
@@ -104,14 +114,14 @@ def mmseqs_search(fasta_path: str | Path, databases=("UniProtKB/Swiss-Prot",),
     """MMseqs2 web server: fast, profile-sensitive protein search."""
     files = {"q": (Path(fasta_path).name, Path(fasta_path).read_bytes())}
     data = [("mode", "accept")] + [("database[]", d) for d in databases]
-    t = _json(requests.post(f"{MMSEQS}/ticket", files=files, data=data, timeout=60, headers=UA), "MMseqs2")
+    t = _json(_get("POST", f"{MMSEQS}/ticket", "MMseqs2", files=files, data=data, timeout=60), "MMseqs2")
     job_id = t.get("id", "")
     if t.get("status") == "ERROR" or not job_id:
         raise RuntimeError(f"MMseqs2 server rejected the job: {t}")
     log(f"      mmseqs: submitted {job_id}")
-    _poll(lambda: _json(requests.get(f"{MMSEQS}/ticket/{job_id}", timeout=30, headers=UA), "MMseqs2").get("status"),
+    _poll(lambda: _json(_get("GET", f"{MMSEQS}/ticket/{job_id}", "MMseqs2", timeout=30), "MMseqs2").get("status"),
           {"COMPLETE"}, {"ERROR"}, timeout, 3, "mmseqs", job_id, log)
-    res = _json(requests.get(f"{MMSEQS}/result/{job_id}/0", timeout=120, headers=UA), "MMseqs2")
+    res = _json(_get("GET", f"{MMSEQS}/result/{job_id}/0", "MMseqs2", timeout=120), "MMseqs2")
     rows = []
     for db in res.get("results", []):
         for aln in (db.get("alignments") or []):
@@ -150,7 +160,7 @@ def ncbi_blast(sequence: str, program: str = "blastp", database: str = "nr", eva
         params["ENTREZ_QUERY"] = entrez_query
     if email:
         params["EMAIL"] = email
-    r = requests.post(NCBI, data=params, timeout=60, headers=UA)
+    r = _get("POST", NCBI, "NCBI", data=params, timeout=60)
     r.raise_for_status()
     rtoe = next((line.split("=", 1)[1].strip() for line in r.text.splitlines()
                  if line.strip().startswith("RTOE =")), "")
@@ -160,8 +170,8 @@ def ncbi_blast(sequence: str, program: str = "blastp", database: str = "nr", eva
     log(f"      ncbi: submitted {rid}")
 
     def status() -> str:
-        s = requests.get(NCBI, params={"CMD": "Get", "FORMAT_OBJECT": "SearchInfo", "RID": rid},
-                         timeout=30, headers=UA).text
+        s = _get("GET", NCBI, "NCBI", params={"CMD": "Get", "FORMAT_OBJECT": "SearchInfo", "RID": rid},
+                 timeout=30).text
         if "Status=WAITING" in s:
             return "WAITING"
         if "Status=FAILED" in s:
@@ -173,8 +183,8 @@ def ncbi_blast(sequence: str, program: str = "blastp", database: str = "nr", eva
     # NCBI's usage rules: check a given RID no more than once a minute
     time.sleep(min(max(int(rtoe) if rtoe.isdigit() else 30, 10), 60, timeout))
     _poll(status, {"READY"}, {"FAILED", "UNKNOWN"}, timeout, 60, "ncbi", rid, log, max_interval=60)
-    xml = requests.get(NCBI, params={"CMD": "Get", "FORMAT_TYPE": "XML", "RID": rid},
-                       timeout=180, headers=UA).text
+    xml = _get("GET", NCBI, "NCBI", params={"CMD": "Get", "FORMAT_TYPE": "XML", "RID": rid},
+               timeout=180).text
     rec = NCBIXML.read(io.StringIO(xml))
     rows = []
     for aln in rec.alignments:

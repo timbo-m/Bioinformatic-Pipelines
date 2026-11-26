@@ -166,13 +166,31 @@ def test_builtin_hits_carry_descriptions():
 
 
 def test_remote_outage_is_a_clear_error(monkeypatch):
-    import requests
     from famscan import remote
 
     class Down:
         status_code, headers = 503, {"content-type": "text/html"}
         text = "<html><title>MMseqs2 search will be back!</title></html>"
 
-    monkeypatch.setattr(requests, "post", lambda *a, **k: Down())
+    monkeypatch.setattr(remote.requests, "request", lambda *a, **k: Down())
     with pytest.raises(RuntimeError, match=r"unavailable \(HTTP 503: MMseqs2 search will be back!\)"):
         remote.mmseqs_search(DATA / "luxC_reference.faa", log=lambda *_: None)
+
+
+def test_unreachable_host_is_a_clear_error(monkeypatch):
+    import requests
+
+    from famscan import remote
+
+    def boom(*a, **k):
+        raise requests.ConnectionError("no route")
+
+    monkeypatch.setattr(remote.requests, "request", boom)
+    for call in (lambda: remote.mmseqs_search(__file__, timeout=1),
+                 lambda: remote.ncbi_blast("MKV", timeout=1, log=lambda *_: None)):
+        try:
+            call()
+        except remote.ServiceUnavailable as e:
+            assert "could not reach" in str(e) and "fetchdb" in str(e)
+        else:
+            raise AssertionError("expected ServiceUnavailable")
