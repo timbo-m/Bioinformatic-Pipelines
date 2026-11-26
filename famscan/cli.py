@@ -48,7 +48,10 @@ def main(argv=None):
     h.add_argument("-t", "--target", required=True)
     h.add_argument("-p", "--program", default="auto",
                    choices=["auto", "blastp", "blastn", "blastx", "tblastn", "tblastx", "hmmsearch"])
-    h.add_argument("-e", "--engine", default="builtin", choices=["builtin", "blast+", "diamond", "ncbi"])
+    h.add_argument("-e", "--engine", default="builtin",
+                   choices=["builtin", "blast+", "diamond", "ncbi", "ebi", "mmseqs"])
+    h.add_argument("--email", help="contact email, required by engine ebi only")
+    h.add_argument("--timeout", type=int, default=900, help="give up on a web service after N seconds")
     h.add_argument("--evalue", type=float, default=1e-5)
     h.add_argument("--out", default="famscan_out")
     h.add_argument("--format", default="md", help="md, xlsx, pdf, comma separated, or all")
@@ -91,7 +94,14 @@ def main(argv=None):
             parse_formats(a.format)
         except ValueError as e:
             sys.exit(f"famscan: {e}")
+    from .remote import SearchTimeout, ServiceUnavailable
+    try:
+        _dispatch(a)
+    except (SearchTimeout, ServiceUnavailable) as e:  # web-service trouble: one clear line
+        sys.exit(f"famscan: {e}")
 
+
+def _dispatch(a):
     if a.cmd == "start":
         from .interactive import main as interactive
         interactive(a.out)
@@ -133,7 +143,8 @@ def main(argv=None):
     elif a.cmd == "search":
         from .workflows import run_workflow
         run_workflow("search", {"query": a.query, "target": a.target, "program": a.program,
-                                "engine": a.engine, "evalue": a.evalue, "formats": a.format}, a.out)
+                                "engine": a.engine, "evalue": a.evalue, "email": a.email,
+                                "timeout": a.timeout, "formats": a.format}, a.out)
     else:
         cfg = Config(query=a.query, proteome=a.proteome or a.seqs, blast_db=a.blast_db,
                      remote_db=a.remote_db, references=a.references, reference_pdb=a.reference_pdb,

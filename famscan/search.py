@@ -19,7 +19,6 @@ Engines:
 from __future__ import annotations
 
 import gzip
-import io
 import re
 import shutil
 import subprocess
@@ -170,6 +169,7 @@ def builtin_search(query: str, target: str, program: str, evalue: float = 1e-5,
                                 method="blastn(nhmmer)", description=_s(h.description or ""),
                                 domain_from=min(a, b), domain_to=max(a, b),
                                 extra={"strand": "+" if a <= b else "-"}))
+        _fill_descriptions(hits, target)
         return hits
     qp = six_frame(q) if tq else q
     tp = six_frame(t) if tt else t
@@ -184,7 +184,30 @@ def builtin_search(query: str, target: str, program: str, evalue: float = 1e-5,
             qparts = qn.rsplit("|", 2) if tq else [qn]
             hits.append(_mk_hit(h, qparts[0], f"{program}(phmmer)", tp, translated_target=tt,
                                 extra={"query_frame": qparts[1], "query_nt": qparts[2]} if tq else {}))
-    return dedupe(hits, key=lambda h: (h.query, h.target))
+    hits = dedupe(hits, key=lambda h: (h.query, h.target))
+    _fill_descriptions(hits, target)
+    return hits
+
+
+def _fill_descriptions(hits: list, fasta: str) -> None:
+    """Sequence blocks carry no FASTA description, so local hits had no protein
+    names (e.g. Swiss-Prot "Long-chain acyl-protein thioester reductase OS=...").
+    Fill them from the target's headers with a quick line scan."""
+    want = {h.target for h in hits if not h.description}
+    if not want or str(fasta).endswith((".gb", ".gbk", ".gbff")):
+        return
+    found = {}
+    with open(fasta, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if line.startswith(">"):
+                sid, _, desc = line[1:].rstrip().partition(" ")
+                if sid in want:
+                    found[sid] = desc.strip()
+                    if len(found) == len(want):
+                        break
+    for h in hits:
+        if not h.description:
+            h.description = found.get(h.target, "")
 
 
 def _mk_hit(h, qname: str, method: str, tseqs: dict, translated_target: bool, extra=None) -> Hit:
@@ -327,29 +350,22 @@ def _parse_tab(text: str, method: str) -> list[Hit]:
 # ------------------------------------------------------------ remote NCBI BLAST
 def remote_blast(queries: dict[str, str], program: str = "blastp", database: str = "nr",
                  evalue: float = 1e-5, hitlist_size: int = 100, entrez_query: str | None = None,
-                 email: str | None = None, pause: float = 11.0, log=print) -> list[Hit]:
+                 email: str | None = None, pause: float = 11.0, timeout: float = 900,
+                 log=print) -> list[Hit]:
     """Submit queries one at a time to NCBI BLAST via its URL API (any of the
-    5 programs). For more than ~20 queries use a local database instead."""
-    from Bio.Blast import NCBIWWW, NCBIXML
+    5 programs), each with a wall-clock limit (remote.ncbi_blast). For more than
+    ~20 queries use a local database instead."""
+    from . import remote as rs
 
-    if email:
-        NCBIWWW.email = email
     hits: list[Hit] = []
     for i, (qid, seq) in enumerate(queries.items()):
         if i:
             time.sleep(pause)
         log(f"[ncbi] {program} {qid} ({i + 1}/{len(queries)}) vs {database}")
-        kw = dict(expect=evalue, hitlist_size=hitlist_size)
-        if entrez_query:
-            kw["entrez_query"] = entrez_query
-        rec = NCBIXML.read(io.StringIO(NCBIWWW.qblast(program, database, seq, **kw).read()))
-        for aln in rec.alignments:
-            hsp = aln.hsps[0]
-            hits.append(Hit(target=aln.accession, query=qid, evalue=hsp.expect, score=hsp.bits,
-                            method=f"ncbi-{program}:{database}", description=aln.hit_def[:200],
-                            domain_from=hsp.sbjct_start, domain_to=hsp.sbjct_end,
-                            sequence=hsp.sbjct.replace("-", "") if program in ("blastp", "blastx") else "",
-                            extra={"pident": round(100 * hsp.identities / hsp.align_length, 1)}))
+        for r in rs.ncbi_blast(seq, program=program, database=database, evalue=evalue,
+                               hitlist_size=hitlist_size, entrez_query=entrez_query, email=email,
+                               timeout=timeout, log=log):
+            hits.append(_from_row(r, qid))
     return hits
 
 

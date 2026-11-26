@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from famscan import analyze, structure
 
@@ -156,3 +157,22 @@ def test_ebi_requires_email():
         assert "email" in str(e)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_builtin_hits_carry_descriptions():
+    from famscan import search
+    hits = search.builtin_search(str(DATA / "luxC_reference.faa"), str(DATA / "luxC_homologs.faa"), "blastp")
+    assert hits and all(h.description for h in hits)
+
+
+def test_remote_outage_is_a_clear_error(monkeypatch):
+    import requests
+    from famscan import remote
+
+    class Down:
+        status_code, headers = 503, {"content-type": "text/html"}
+        text = "<html><title>MMseqs2 search will be back!</title></html>"
+
+    monkeypatch.setattr(requests, "post", lambda *a, **k: Down())
+    with pytest.raises(RuntimeError, match=r"unavailable \(HTTP 503: MMseqs2 search will be back!\)"):
+        remote.mmseqs_search(DATA / "luxC_reference.faa", log=lambda *_: None)
