@@ -303,13 +303,13 @@ def test_hint_matches_how_it_was_started(monkeypatch):
     assert _how_invoked().endswith("-m famscan.cli")
 
 
-def test_windows_hint_prefers_the_launcher(monkeypatch, tmp_path):
-    """On Windows the .cmd launcher is the only form that always works."""
+def test_windows_hint_prefers_the_launcher(monkeypatch):
+    """On Windows the .cmd launcher is the only form that always works, so the
+    hint must point at it even when famscan was started another way."""
     from famscan import cli
 
-    monkeypatch.setattr(cli.os, "name", "nt")
-    monkeypatch.setattr(cli, "__file__", str(tmp_path / "famscan" / "cli.py"))
-    (tmp_path / "famscan").mkdir()
-    (tmp_path / "famscan.cmd").write_text("@echo off\n")
-    monkeypatch.chdir(tmp_path)
-    assert cli._how_invoked() == r".\famscan"
+    assert (Path(cli.__file__).resolve().parent.parent / "famscan.cmd").exists()
+    monkeypatch.chdir(Path(cli.__file__).resolve().parent.parent)
+    assert cli._how_invoked(windows=True) == r".\famscan"
+    monkeypatch.setattr(sys, "argv", ["/x/bin/famscan"])
+    assert cli._how_invoked(windows=False) == "famscan"

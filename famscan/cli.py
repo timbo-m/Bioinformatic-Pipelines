@@ -138,13 +138,14 @@ def _demo_data() -> Path | None:
     return None
 
 
-def _how_invoked() -> str:
+def _how_invoked(windows: bool | None = None) -> str:
     """How the user started famscan, so printed hints are commands they can paste.
     On Windows `famscan` is often unavailable (no PATH, or blocked by Smart App
     Control) and activation is blocked too, so prefer the famscan.cmd launcher,
     then the running interpreter, and only then the bare `famscan` command."""
+    windows = os.name == "nt" if windows is None else windows
     launcher = Path(__file__).resolve().parent.parent / "famscan.cmd"
-    if os.name == "nt" and launcher.exists():
+    if windows and launcher.exists():
         return r".\famscan" if Path.cwd() == launcher.parent else f'& "{launcher}"'
     if Path(sys.argv[0]).stem in ("famscan", "famscan-script"):
         return "famscan"
