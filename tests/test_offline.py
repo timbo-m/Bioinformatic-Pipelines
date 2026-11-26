@@ -194,3 +194,47 @@ def test_unreachable_host_is_a_clear_error(monkeypatch):
             assert "could not reach" in str(e) and "fetchdb" in str(e)
         else:
             raise AssertionError("expected ServiceUnavailable")
+
+
+def _down(*_a, **_k):
+    raise RuntimeError("boom")
+
+
+def test_service_outage_continues_and_is_reported(tmp_path, monkeypatch):
+    """A structure-server outage must not sink the whole run."""
+    from famscan import structure
+    from famscan.workflows import run_workflow
+
+    monkeypatch.setattr(structure, "get_structure", lambda *a, **k: (None, "unreachable"))
+    ctx = run_workflow("family", {"input": str(DATA / "proteome_938293.faa"),
+                                  "query": str(DATA / "PF02826.hmm"), "structure": "esmfold",
+                                  "top_n": 2}, tmp_path, log=lambda *_: None)
+    assert len(ctx.focus) == 7                      # every earlier stage survived
+    assert ctx.outages and ctx.outages[0]["stage"] == "structure"
+    assert "unavailable" in (tmp_path / "report.md").read_text()
+
+
+def test_service_outage_can_ask_and_stop(tmp_path, monkeypatch):
+    from famscan import structure
+    from famscan.workflows import run_workflow
+
+    monkeypatch.setattr(structure, "get_structure", lambda *a, **k: (None, "unreachable"))
+    asked = []
+    ctx = run_workflow("family", {"input": str(DATA / "proteome_938293.faa"),
+                                  "query": str(DATA / "PF02826.hmm"), "structure": "esmfold",
+                                  "top_n": 2, "on_service_down": "ask"}, tmp_path,
+                       log=lambda *_: None, ask=lambda q: (asked.append(q), False)[1])
+    assert asked and "Continue without it?" in asked[0]
+    assert "Stopped early" in (tmp_path / "report.md").read_text()
+    assert ctx.outages
+
+
+def test_email_config(tmp_path, monkeypatch):
+    from famscan import config
+    monkeypatch.setenv("FAMSCAN_CONFIG", str(tmp_path / "c.json"))
+    monkeypatch.delenv("FAMSCAN_EMAIL", raising=False)
+    assert config.email() is None
+    config.save(email="a@b.org")
+    assert config.email() == "a@b.org"
+    assert config.email("other@c.org") == "other@c.org"      # explicit wins
+    assert not config.valid_email("nope")

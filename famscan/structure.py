@@ -129,7 +129,12 @@ def foldseek_web(pdb: Path, databases=("afdb50", "pdb100"), timeout: int = 600) 
 
 def get_structure(hit_id: str, seq: str, outdir: Path, pdb_dir: Path | None = None,
                   method: str = "auto", log=print) -> tuple[Path | None, str]:
-    """Return (pdb_path, source) for a hit, trying the cheapest source first."""
+    """Return (pdb_path, source) for a hit, trying the cheapest source first.
+
+    source is "provided", "alphafold-db", "esmfold-api", "unavailable" (this
+    protein could not be folded) or "unreachable" (the servers are down, so
+    there is no point trying the rest)."""
+    unreachable = 0
     outdir.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9_.-]", "_", hit_id)
     if pdb_dir:
@@ -145,10 +150,12 @@ def get_structure(hit_id: str, seq: str, outdir: Path, pdb_dir: Path | None = No
                 if p:
                     return p, "alphafold-db"
             except requests.RequestException as e:
+                unreachable += isinstance(e, (requests.ConnectionError, requests.Timeout))
                 log(f"[structure] AFDB lookup failed for {hit_id}: {str(e)[:120]}")
     if method in ("auto", "esmfold"):
         try:
             return esmfold(seq, outdir / f"{safe}.esmfold.pdb"), "esmfold-api"
         except (requests.RequestException, RuntimeError, ValueError) as e:
+            unreachable += isinstance(e, (requests.ConnectionError, requests.Timeout))
             log(f"[structure] ESMFold failed for {hit_id}: {str(e)[:120]}")
-    return None, "unavailable"
+    return None, "unreachable" if unreachable else "unavailable"

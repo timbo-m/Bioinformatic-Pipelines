@@ -7,6 +7,7 @@
   famscan run ...                       classic family pipeline (v0.1 options)
   famscan export DIR                    add Excel/PDF to a finished run
   famscan fetchdb swissprot             download a database to search locally
+  famscan config --email you@org         save your EBI contact email on this computer
 
 Add --format md,xlsx,pdf (or all) to any run for Excel and PDF reports.
 """
@@ -50,7 +51,10 @@ def main(argv=None):
                    choices=["auto", "blastp", "blastn", "blastx", "tblastn", "tblastx", "hmmsearch"])
     h.add_argument("-e", "--engine", default="builtin",
                    choices=["builtin", "blast+", "diamond", "ncbi", "ebi", "mmseqs"])
-    h.add_argument("--email", help="contact email, required by engine ebi only")
+    h.add_argument("--email", help="contact email, required by engine ebi only "
+                                   "(or save it once: famscan config --email you@example.org)")
+    h.add_argument("--on-service-down", default="ask", choices=["ask", "skip", "stop"],
+                   help="if the service is down: ask, carry on (skip), or stop")
     h.add_argument("--timeout", type=int, default=900, help="give up on a web service after N seconds")
     h.add_argument("--evalue", type=float, default=1e-5)
     h.add_argument("--out", default="famscan_out")
@@ -77,6 +81,10 @@ def main(argv=None):
     r.add_argument("--cpus", type=int, default=0)
     r.add_argument("--out", default="famscan_out")
     r.add_argument("--format", default="md", help="md, xlsx, pdf, comma separated, or all")
+
+    c = sub.add_parser("config", help="save settings on this computer (e.g. your EBI contact email)")
+    c.add_argument("--email", help="contact email for the EBI service")
+    c.add_argument("--show", action="store_true", help="print the saved settings and where they live")
 
     f = sub.add_parser("fetchdb", help="download a database so searches run locally")
     f.add_argument("name", nargs="?", help="swissprot | uniref50 | pfam | prosite | trembl | proteome:ACC")
@@ -122,6 +130,17 @@ def _dispatch(a):
             params[k] = v.split() if k == "proteomes" else _coerce(v)
         params.setdefault("formats", a.format)
         run_workflow(a.name, params, a.out)
+    elif a.cmd == "config":
+        from . import config
+        if a.email and not config.valid_email(a.email):
+            sys.exit(f"famscan: '{a.email}' does not look like an email address")
+        if a.email:
+            print(f"saved in {config.save(email=a.email)}")
+        if a.show or not a.email:
+            data = config.load()
+            print(f"{config.config_path()}:")
+            print("\n".join(f"  {k} = {v}" for k, v in data.items()) if data else "  (empty)")
+            print("\nThis file stays on this computer; it is not part of the repository.")
     elif a.cmd == "fetchdb":
         from .databases import describe, fetch, installed
         if a.list or not a.name:
@@ -144,7 +163,8 @@ def _dispatch(a):
         from .workflows import run_workflow
         run_workflow("search", {"query": a.query, "target": a.target, "program": a.program,
                                 "engine": a.engine, "evalue": a.evalue, "email": a.email,
-                                "timeout": a.timeout, "formats": a.format}, a.out)
+                                "timeout": a.timeout, "on_service_down": a.on_service_down,
+                                "formats": a.format}, a.out)
     else:
         cfg = Config(query=a.query, proteome=a.proteome or a.seqs, blast_db=a.blast_db,
                      remote_db=a.remote_db, references=a.references, reference_pdb=a.reference_pdb,

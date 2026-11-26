@@ -87,6 +87,22 @@ famscan search -q protein.faa -t nr -p blastp -e ncbi        # NCBI's servers, s
 famscan search -q proteins.faa -t uniref50.dmnd -e diamond   # big local jobs
 ```
 
+## When a web service is down
+
+Nothing is lost if ESMFold, AlphaFold DB, NCBI, the EBI or MMseqs2 is unreachable.
+Only the stage that needed the service is affected; every other stage keeps its
+results. `famscan start` tells you which service failed and asks whether to
+continue without that step. Scripts choose up front:
+
+```bash
+--set on_service_down=ask    # explain and ask (the default in famscan start)
+--set on_service_down=skip   # carry on without that step (the default for scripts)
+--set on_service_down=stop   # stop the run
+```
+
+Either way the report gains a section naming the service, the stage, and exactly
+what is missing from the results, so a gap is never silent.
+
 ## Avoiding web services entirely
 
 ```bash
@@ -110,7 +126,9 @@ heavy users get blocked), and breaks when the page changes.
 
 | Batch size | Use |
 |---|---|
-| 1-20 queries | a web service: `-e ncbi` (official URL API), `-e ebi` (separate queue, usually quicker, needs a contact email) or `-e mmseqs` (seconds per query) |
+| 1-20 queries | a web service: `-e ncbi` (official URL API), `-e ebi` (separate queue, usually quicker; the EBI requires a contact email, which
+famscan asks for and can save with `famscan config --email you@example.org` - it
+is kept on your computer only and never committed) or `-e mmseqs` (seconds per query) |
 | many queries or whole proteomes | `famscan fetchdb swissprot` once, then search locally with the built-in engine, BLAST+ or DIAMOND |
 
 Every web service call has a time limit (`--set timeout=900` by default) and

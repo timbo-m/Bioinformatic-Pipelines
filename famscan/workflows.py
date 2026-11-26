@@ -57,6 +57,8 @@ class Ctx:
     files: list = field(default_factory=list)
     timings: dict = field(default_factory=dict)
     aln: dict = field(default_factory=dict)
+    ask: Callable | None = None          # set by `famscan start` to prompt the user
+    outages: list = field(default_factory=list)
 
     def p(self, key, default=None):
         v = self.params.get(key)
@@ -79,6 +81,34 @@ class Ctx:
 
     def section(self, title: str, md: str):
         self.sections.append((title, md))
+
+    def service_down(self, service: str, stage: str, error: Exception, without: str,
+                     fatal: bool = False) -> bool:
+        """A web service used by this stage is unreachable. Record it, tell the
+        user, and ask whether to carry on without it. Returns True to continue.
+
+        `on_service_down` decides when nobody can be asked: "ask" (the default in
+        `famscan start`), "skip" (carry on, the default for scripts) or "stop".
+        """
+        policy = str(self.p("on_service_down", "ask" if self.ask else "skip"))
+        msg = f"{service} is not available: {str(error).strip()}"
+        self.log(f"      {msg}")
+        self.outages.append({"stage": stage, "service": service, "detail": str(error).strip(),
+                             "continued_without": without})
+        if policy == "stop":
+            raise StopWorkflow(msg)
+        if policy == "ask" and self.ask and not fatal:
+            if not self.ask(f"\n  {service} could not be reached, so this run cannot {without}.\n"
+                            f"  {str(error).strip()}\n  Continue without it?"):
+                raise StopWorkflow(f"stopped at your request: {service} unavailable")
+        tail = ("This stage was the whole search, so there is nothing to continue with."
+                if fatal else
+                f"The run continued without this step, so **{without}** is missing from the results "
+                f"below. Everything else is unaffected.")
+        self.section(f"{service} unavailable",
+                     f"{msg}\n\n{tail} Rerun when the service is back, or avoid it altogether: "
+                     f"`famscan fetchdb swissprot` for searches, `pdb_dir` for your own structures.")
+        return not fatal
 
     def save(self, name: str, obj) -> Path:
         path = self.out / name
@@ -185,9 +215,16 @@ def st_family_search(ctx: Ctx):
 def st_homology(ctx: Ctx):
     q, t = ctx.p("query"), ctx.p("target")
     prog, eng = ctx.p("program", "auto"), ctx.p("engine", "builtin")
-    hits = search.homology_search(q, t, program=prog, engine=eng, evalue=float(ctx.p("evalue", 1e-5)),
-                                  workdir=ctx.out, email=ctx.p("email"),
-                                  timeout=float(ctx.p("timeout", 900)), log=ctx.log)
+    from .remote import SearchTimeout, ServiceUnavailable
+    try:
+        hits = search.homology_search(q, t, program=prog, engine=eng, evalue=float(ctx.p("evalue", 1e-5)),
+                                      workdir=ctx.out, email=ctx.p("email"),
+                                      timeout=float(ctx.p("timeout", 900)), log=ctx.log)
+    except (ServiceUnavailable, SearchTimeout) as e:
+        ctx.service_down({"ebi": "EBI", "mmseqs": "MMseqs2", "ncbi": "NCBI"}.get(eng, eng),
+                         "homology", e, f"search {t} over the network", fatal=True)
+        raise StopWorkflow(f"no hits: the {eng} service is unavailable. Download a database with "
+                           f"`famscan fetchdb swissprot` and search it locally instead.") from None
     df = pd.DataFrame([h.row() for h in hits])
     ctx.save("homology_hits.tsv", df)
     if len(df):
@@ -544,7 +581,14 @@ def st_structure(ctx: Ctx):
     rows, ok = {}, 0
     for i in top:
         pdb, src = structure.get_structure(i, ctx.proteins[i], ctx.out / "structures",
-                                           Path(ctx.p("pdb_dir")) if ctx.p("pdb_dir") else None, method, log=ctx.log)
+                                           Path(ctx.p("pdb_dir")) if ctx.p("pdb_dir") else None, method,
+                                           log=ctx.log)
+        if src == "unreachable":
+            ctx.service_down("The structure service (ESMFold / AlphaFold DB)", "structure",
+                             RuntimeError("the prediction servers could not be reached"),
+                             "confirm these hits with a 3D structure")
+            ctx.add(rows)
+            return
         r = {"structure_source": src}
         if pdb:
             ok += 1
@@ -654,20 +698,23 @@ P_HMMDB = Param("hmm_db", "Domain library for architecture (Pfam-A.hmm), optiona
 P_REFPDB = Param("reference_pdb", "Known structure (PDB) to compare folds with, optional")
 P_RULES = Param("rules", 'Filters as JSON, e.g. {"length":[200,600],"pI":[null,7]}', "str",
                 default='{"length":[50,3000]}')
+P_DOWN = Param("on_service_down", "If a web service is down", "choice", default="ask",
+               choices=("ask", "skip", "stop"),
+               help="ask (famscan start), skip (carry on, default for scripts) or stop")
 P_MOTIFS = Param("motifs", "Your own motifs, name=PATTERN;... (regex or PROSITE syntax), optional", "str")
 
 WORKFLOWS: dict[str, Workflow] = {w.key: w for w in [
     Workflow("family", "Find members of a protein family",
              "I want every member of a protein family in my genome/proteome, checked by structure",
              [P_INPUT, P_QUERY, Param("references", "FASTA of known members, optional"), P_REFPDB, P_RULES,
-              P_EVAL, P_HMMDB, P_MOTIFS, P_TOPN, P_STRUCT],
+              P_EVAL, P_HMMDB, P_MOTIFS, P_TOPN, P_STRUCT, P_DOWN],
              ["load", "family_search", "domains", "primary", "features", "motifs", "compare_refs", "filter",
               "structure", "report"]),
     Workflow("enzyme", "Discover new enzymes",
              "I'm looking for new enzymes of a known type (e.g. novel lipases, PETases)",
              [P_INPUT, P_QUERY, Param("references", "FASTA of characterised enzymes, optional"), P_REFPDB,
               P_RULES, P_MOTIFS, P_HMMDB, Param("cluster_identity", "Cluster identity % to remove redundancy", "float",
-                                                default=90), P_EVAL, P_TOPN, P_STRUCT],
+                                                default=90), P_EVAL, P_TOPN, P_STRUCT, P_DOWN],
              ["load", "family_search", "domains", "primary", "features", "motifs", "compare_refs", "filter",
               "cluster", "msa", "tree", "structure", "rank", "report"],
              "Use `motifs` for catalytic signatures, e.g. lipase=G-x-S-x-G."),
@@ -680,7 +727,8 @@ WORKFLOWS: dict[str, Workflow] = {w.key: w for w in [
     Workflow("drug_target", "Find drug targets",
              "I want proteins in a pathogen that humans don't have (potential drug or vaccine targets)",
              [P_INPUT, Param("host", "Host proteome FASTA (e.g. UniProt human UP000005640)", required=True),
-              Param("essential_db", "Essential genes FASTA (e.g. DEG), optional"), P_HMMDB, P_TOPN, P_STRUCT],
+              Param("essential_db", "Essential genes FASTA (e.g. DEG), optional"), P_HMMDB, P_TOPN,
+              P_STRUCT, P_DOWN],
              ["load", "subtract_host", "domains", "primary", "features", "structure", "rank", "report"],
              "Secreted/membrane proteins in the output are vaccine candidates; essential, cytoplasmic "
              "enzymes with good folds are classic drug targets."),
@@ -702,7 +750,8 @@ WORKFLOWS: dict[str, Workflow] = {w.key: w for w in [
     Workflow("unknown", "Characterise unknown proteins",
              "I have proteins with no or weak annotation and want to know what they might be",
              [P_INPUT, P_HMMDB, Param("annotation_db", "Reference proteins for naming, optional"), P_MOTIFS, P_TOPN,
-              P_STRUCT, Param("foldseek_web", "Search predicted structures with Foldseek web", "bool", default=False)],
+              P_STRUCT, Param("foldseek_web", "Search predicted structures with Foldseek web", "bool",
+                              default=False), P_DOWN],
              ["load", "name_by_homology", "domains", "primary", "features", "motifs", "structure", "report"],
              "Structure search (Foldseek) often finds function when sequence search fails."),
     Workflow("lab_candidates", "Pick candidates for the lab",
@@ -734,7 +783,7 @@ WORKFLOWS: dict[str, Workflow] = {w.key: w for w in [
                     choices=("builtin", "blast+", "diamond", "ncbi", "ebi", "mmseqs")),
               Param("email", "Contact email (required by the EBI service only)", "str"),
               Param("timeout", "Give up on a web service after this many seconds", "int", default=900),
-              P_EVAL],
+              P_DOWN, P_EVAL],
              ["homology", "report"],
              "builtin needs no install and no network. ncbi/ebi/mmseqs are web services, fine for a few "
              "queries; for big jobs run `famscan fetchdb swissprot` and search the file locally."),
@@ -742,7 +791,8 @@ WORKFLOWS: dict[str, Workflow] = {w.key: w for w in [
 
 
 # ===================================================================== runner
-def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=print) -> Ctx:
+def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=print,
+                 ask: Callable | None = None) -> Ctx:
     """Run workflow `key`. params["formats"] = "md", "xlsx", "pdf", a comma list or "all"."""
     wf = WORKFLOWS[key]
     from .export import parse_formats
@@ -755,7 +805,11 @@ def run_workflow(key: str, params: dict, out: str | Path = "famscan_out", log=pr
     defaults = {p.name: p.default for p in wf.params if p.default is not None}
     if key == "engineering" and not params.get("query"):
         params["query"] = params["reference"]
-    ctx = Ctx(params={**defaults, **params}, out=out, log=log)
+    from . import config
+    merged = {**defaults, **params}
+    if merged.get("engine") == "ebi":
+        merged["email"] = config.email(merged.get("email"))
+    ctx = Ctx(params=merged, out=out, log=log, ask=ask)
     t0 = time.time()
     stopped = None
     for i, name in enumerate(wf.stages, 1):
@@ -785,13 +839,18 @@ def write_report(ctx: Ctx, wf: Workflow, stopped: str | None, elapsed: float):
         seqio.write_fasta(ctx.seqs(), ctx.out / "final_candidates.faa")
         ctx.files.insert(1, "final_candidates.faa")
     (ctx.out / "run.json").write_text(json.dumps({"workflow": wf.key, "params": ctx.params,
-                                                  "timings": ctx.timings}, indent=2, default=str))
+                                                  "timings": ctx.timings, "outages": ctx.outages},
+                                                 indent=2, default=str))
     lines = [f"# famscan: {wf.title}", "", f"_{wf.question}_", "",
              f"- Stages: {' -> '.join(wf.stages[:-1])}",
              f"- Parameters: `{ {k: v for k, v in ctx.params.items() if v not in (None, '')} }`",
              f"- Run time: {elapsed:.1f} s; final candidates: {len(ctx.focus)}"]
     if stopped:
         lines += ["", f"> **Stopped early:** {stopped}"]
+    if ctx.outages:
+        lines += ["", "> **Steps missing because a web service was down:** "
+                  + "; ".join(f"{o['service']} ({o['stage']}) - no {o['continued_without']}"
+                              for o in ctx.outages)]
     if wf.notes:
         lines += ["", f"> {wf.notes}"]
     for title, md in ctx.sections:

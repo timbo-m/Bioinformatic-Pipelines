@@ -16,6 +16,8 @@ description: Guided bioinformatics pipelines. Use for protein family searches, e
      contact email, which the user must supply) or `engine=mmseqs`. Never automate
      the NCBI web form; the official API allows about 1 request every 10 s, and its
      queue can reach 30 minutes.
+   - `engine=ebi` needs a contact email. Ask the user for theirs or use the one saved
+     by `famscan config --email ...`; never invent one or reuse an address from elsewhere.
    - if the user hits a slow queue, or will search more than about 20 queries, suggest
      `famscan fetchdb swissprot` and searching the downloaded file locally.
 4. Run `famscan workflow <name> --out <dir> --set key=value ...` and read `<dir>/report.md`.
@@ -27,3 +29,5 @@ description: Guided bioinformatics pipelines. Use for protein family searches, e
    secondary structure) and suggest confirming final picks with SignalP 6, DeepTMHMM,
    IUPred3, PSIPRED or the structure-derived calls.
 7. For more than ~50 structures, suggest local ColabFold or ESMFold and `--set pdb_dir=...`.
+8. If a report has a "<service> unavailable" section, say which step is missing and
+   offer to rerun it later or to avoid the service (local database, own structures).

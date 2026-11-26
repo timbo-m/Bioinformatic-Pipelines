@@ -5,6 +5,7 @@ import re
 import shlex
 from pathlib import Path
 
+from . import config
 from .databases import CATALOG, db_dir, fetch, installed
 from .workflows import STAGES, WORKFLOWS, Param, run_workflow
 
@@ -66,6 +67,30 @@ def _ask(prompt: str, default=None) -> str:
     return v if v else ("" if default is None else str(default))
 
 
+def _confirm(question: str) -> bool:
+    """Yes/no prompt used mid-run when a web service turns out to be down."""
+    try:
+        return _ask(f"{question} (y/n)", "y").lower().startswith("y")
+    except _Cancelled:
+        return False
+
+
+def _ask_email(saved: str | None) -> str | None:
+    """The EBI requires a contact address with every job."""
+    print("    The EBI requires a contact email with each job; they use it only to reach you about "
+          "misuse. It is sent to the EBI and saved on this computer only.")
+    while True:
+        v = _ask("    Your email", saved or "")
+        if not v:
+            print("    needed for the EBI service - pick another engine to skip it")
+            return None
+        if config.valid_email(v):
+            if v != saved and _ask(f"    remember {v} for next time? (y/n)", "y").lower().startswith("y"):
+                print(f"    saved in {config.save(email=v)}")
+            return v
+        print("    that does not look like an email address")
+
+
 def _ask_param(p: Param):
     while True:
         extra = f" ({'/'.join(p.choices)})" if p.choices else ""
@@ -95,10 +120,12 @@ def _ask_param(p: Param):
         if p.kind == "choice" and p.choices and v not in p.choices:
             print(f"    choose one of {', '.join(p.choices)}")
             continue
-        if p.kind == "int":
-            return int(v)
-        if p.kind == "float":
-            return float(v)
+        if p.kind in ("int", "float"):
+            try:
+                return int(v) if p.kind == "int" else float(v)
+            except ValueError:
+                print(f"    {p.kind} expected, got {v!r}")
+                continue
         if p.kind == "bool":
             return v.lower() in ("y", "yes", "true", "1")
         return str(Path(v).expanduser()) if p.kind == "file" and Path(v).expanduser().exists() else v
@@ -131,9 +158,17 @@ def _menu(out_default: str = "famscan_out"):
     print("\nInputs (files can be protein or DNA; genomes get gene calling automatically):")
     params = {}
     for p in wf.params:
-        v = _ask_param(p)
+        if p.name == "email":
+            if params.get("engine") != "ebi":
+                continue
+            v = _ask_email(config.email())
+        else:
+            v = _ask_param(p)
         if v is not None:
             params[p.name] = v
+    if params.get("engine") == "ebi" and not params.get("email"):
+        print("  no email given, so switching the engine back to builtin (no network needed)")
+        params["engine"] = "builtin"
     out = _ask("Output folder", out_default)
     while True:
         fmt = _ask("Report formats: md, xlsx (Excel), pdf - comma separated, or all", "md")
@@ -147,4 +182,4 @@ def _menu(out_default: str = "famscan_out"):
         x for k, v in params.items() for x in ("--set", f"{k}={' '.join(v) if isinstance(v, list) else v}")]
     print("\nTo rerun without questions:\n  " + " ".join(shlex.quote(c) for c in cmd) + "\n")
     if _ask("Run now? (y/n)", "y").lower().startswith("y"):
-        run_workflow(wf.key, params, out)
+        run_workflow(wf.key, params, out, ask=_confirm)
