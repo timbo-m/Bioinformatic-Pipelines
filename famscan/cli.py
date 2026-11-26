@@ -6,6 +6,7 @@
   famscan search -q Q -t T [-p blastx]  one homology search, any direction
   famscan run ...                       classic family pipeline (v0.1 options)
   famscan export DIR                    add Excel/PDF to a finished run
+  famscan fetchdb swissprot             download a database to search locally
 
 Add --format md,xlsx,pdf (or all) to any run for Excel and PDF reports.
 """
@@ -74,6 +75,12 @@ def main(argv=None):
     r.add_argument("--out", default="famscan_out")
     r.add_argument("--format", default="md", help="md, xlsx, pdf, comma separated, or all")
 
+    f = sub.add_parser("fetchdb", help="download a database so searches run locally")
+    f.add_argument("name", nargs="?", help="swissprot | uniref50 | pfam | prosite | trembl | proteome:ACC")
+    f.add_argument("--dir", help="where to put it (default ~/.famscan/db or $FAMSCAN_DB)")
+    f.add_argument("--force", action="store_true", help="redownload even if present")
+    f.add_argument("--list", action="store_true", help="show what is available and what you already have")
+
     x = sub.add_parser("export", help="write report.xlsx / report.pdf for a finished run")
     x.add_argument("dir", help="output folder of an earlier run (must contain report.md)")
     x.add_argument("--format", default="xlsx,pdf", help="md, xlsx, pdf, comma separated, or all")
@@ -105,6 +112,19 @@ def main(argv=None):
             params[k] = v.split() if k == "proteomes" else _coerce(v)
         params.setdefault("formats", a.format)
         run_workflow(a.name, params, a.out)
+    elif a.cmd == "fetchdb":
+        from .databases import describe, fetch, installed
+        if a.list or not a.name:
+            print("Available:\n" + describe())
+            have = installed(a.dir)
+            print("\nAlready downloaded:" if have else "\nNothing downloaded yet.")
+            for row in have:
+                print(f"  {row['path']}  ({row['size_mb']} MB)")
+            if not a.name:
+                return
+        path = fetch(a.name, a.dir, force=a.force, make_blast_db=True)
+        print(f"\nUse it with:\n  famscan search -q query.faa -t {path}\n"
+              f"  famscan workflow annotate --set input=genome.fna --set annotation_db={path}")
     elif a.cmd == "export":
         from .export import export
         if not (Path(a.dir) / "report.md").exists():

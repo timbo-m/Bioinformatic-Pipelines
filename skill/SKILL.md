@@ -12,8 +12,12 @@ description: Guided bioinformatics pipelines. Use for protein family searches, e
 3. Choose a search engine by job size:
    - many sequences or whole proteomes: the built-in engine (HMMER), or `blast+`/`diamond`
      against a downloaded database.
-   - a few queries against NCBI nr/swissprot: `engine=ncbi`. Never automate the
-     NCBI web form; the official API allows about 1 request every 10 s.
+   - a few queries against a web service: `engine=ncbi`, `engine=ebi` (needs a
+     contact email, which the user must supply) or `engine=mmseqs`. Never automate
+     the NCBI web form; the official API allows about 1 request every 10 s, and its
+     queue can reach 30 minutes.
+   - if the user hits a slow queue, or will search more than about 20 queries, suggest
+     `famscan fetchdb swissprot` and searching the downloaded file locally.
 4. Run `famscan workflow <name> --out <dir> --set key=value ...` and read `<dir>/report.md`.
    Add `--format excel`, `--format pdf` or `--format all` when the user wants a
    spreadsheet or a PDF alongside the Markdown report.

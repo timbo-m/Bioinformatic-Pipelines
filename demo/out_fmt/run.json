@@ -1,0 +1,15 @@
+{
+  "workflow": "search",
+  "params": {
+    "program": "blastp",
+    "engine": "builtin",
+    "timeout": 900,
+    "evalue": 1e-05,
+    "query": "data/luxC_reference.faa",
+    "target": "data/luxC_homologs.faa",
+    "formats": "md"
+  },
+  "timings": {
+    "homology": 0.18
+  }
+}

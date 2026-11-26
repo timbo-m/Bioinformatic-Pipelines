@@ -89,9 +89,49 @@ def guess_program(query_kind: str, target_kind: str, translated: bool = False) -
 
 
 # ----------------------------------------------------------------- public API
+ENGINES = ("builtin", "blast+", "diamond", "ncbi", "ebi", "mmseqs")
+
+
+def remote_search(query: str, program: str, engine: str, database: str, evalue: float,
+                  email: str | None = None, timeout: float = 900, pause: float = 11.0,
+                  max_hits: int = 100, log=print) -> list[Hit]:
+    """One job per query against a web service (ncbi, ebi or mmseqs). Every
+    service has a time limit, so a queued job cannot hang the run. For more than
+    about 20 queries download a database instead: `famscan fetchdb swissprot`."""
+    from . import remote as rs
+
+    queries = read_seqs(query)
+    if len(queries) > 20:
+        log(f"      note: {len(queries)} queries through {engine}; a local database "
+            f"(famscan fetchdb swissprot) would be far faster and has no limits")
+    hits: list[Hit] = []
+    if engine == "mmseqs":  # takes the whole FASTA in one job
+        for r in rs.mmseqs_search(query, timeout=timeout, log=log):
+            hits.append(_from_row(r, r.get("query") or next(iter(queries))))
+        return hits
+    fn = rs.ebi_blast if engine == "ebi" else rs.ncbi_blast
+    kw = {"email": email} if engine == "ebi" or email else {}
+    for i, (qid, seq) in enumerate(queries.items()):
+        if i:
+            time.sleep(pause)  # NCBI asks for <= 1 request / 10 s
+        log(f"      {engine}: {program} {qid} ({i + 1}/{len(queries)}) vs {database}")
+        for r in fn(seq, program=program, database=database, evalue=evalue,
+                    hitlist_size=max_hits, timeout=timeout, log=log, **kw):
+            hits.append(_from_row(r, qid))
+    return hits
+
+
+def _from_row(r: dict, qid: str) -> Hit:
+    return Hit(target=r["target"], query=qid, evalue=r["evalue"], score=r["score"],
+               method=r["method"], description=r.get("description", ""),
+               domain_from=r.get("domain_from"), domain_to=r.get("domain_to"),
+               sequence=r.get("sequence", ""), extra={"pident": r.get("pident")})
+
+
 def homology_search(query: str, target: str, program: str = "auto", engine: str = "builtin",
                     evalue: float = 1e-5, cpus: int = 0, max_hits: int = 500,
-                    workdir: Path | None = None, log=print) -> list[Hit]:
+                    workdir: Path | None = None, email: str | None = None,
+                    timeout: float = 900, log=print) -> list[Hit]:
     """Run any BLAST-style search. `query`/`target` are FASTA paths (target may
     also be a BLAST db name for engine='ncbi' or 'blast+')."""
     if program == "hmmsearch" or _is_hmm(query) or re.fullmatch(r"PF\d{5}(\.\d+)?", query or ""):
@@ -102,8 +142,9 @@ def homology_search(query: str, target: str, program: str = "auto", engine: str 
         program = guess_program(qkind, tkind)
     if program not in PROGRAMS:
         raise ValueError(f"unknown program {program}; choose {list(PROGRAMS)} or hmmsearch")
-    if engine == "ncbi":
-        return remote_blast(read_seqs(query), program=program, database=target, evalue=evalue, log=log)
+    if engine in ("ncbi", "ebi", "mmseqs"):
+        return remote_search(query, program, engine, target, evalue, email=email,
+                             timeout=timeout, max_hits=min(max_hits, 100), log=log)
     if engine in ("blast+", "diamond"):
         return local_blast(query, target, program=program, evalue=evalue, max_targets=max_hits,
                            tool="diamond" if engine == "diamond" else "auto")

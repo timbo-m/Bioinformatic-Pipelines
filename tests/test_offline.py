@@ -120,3 +120,39 @@ def test_export_formats(tmp_path):
                             "structure": "none", "formats": "all"}, tmp_path, log=lambda *_: None)
     for name in ("report.md", "report.xlsx", "report.pdf"):
         assert (tmp_path / name).stat().st_size > 1000
+
+
+def test_database_catalog_and_dir(tmp_path, monkeypatch):
+    from famscan import databases
+    monkeypatch.setenv("FAMSCAN_DB", str(tmp_path / "db"))
+    assert databases.db_dir().is_dir()
+    assert "swissprot" in databases.describe()
+    (tmp_path / "db" / "uniprot_sprot.fasta").write_text(">a\nMKV\n")
+    assert databases.installed()[0]["name"] == "uniprot_sprot.fasta"
+    try:
+        databases.fetch("not_a_db")
+    except ValueError as e:
+        assert "unknown database" in str(e)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_remote_timeout_is_bounded():
+    from famscan.remote import SearchTimeout, _poll
+    try:
+        _poll(lambda: "WAITING", {"READY"}, {"FAILED"}, timeout=1.0, interval=0.2,
+              service="test", job_id="J1", log=lambda *_: None)
+    except SearchTimeout as e:
+        assert e.job_id == "J1" and "local database" in str(e)
+    else:
+        raise AssertionError("expected SearchTimeout")
+
+
+def test_ebi_requires_email():
+    from famscan.remote import ebi_blast
+    try:
+        ebi_blast("MKV", email=None)
+    except ValueError as e:
+        assert "email" in str(e)
+    else:
+        raise AssertionError("expected ValueError")

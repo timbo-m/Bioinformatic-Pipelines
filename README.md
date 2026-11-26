@@ -87,6 +87,21 @@ famscan search -q protein.faa -t nr -p blastp -e ncbi        # NCBI's servers, s
 famscan search -q proteins.faa -t uniref50.dmnd -e diamond   # big local jobs
 ```
 
+## Avoiding web services entirely
+
+```bash
+famscan fetchdb --list                 # what's available, what you already have
+famscan fetchdb swissprot              # ~90 MB, 570k curated proteins
+famscan fetchdb proteome:UP000005640   # one proteome (human here)
+famscan fetchdb pfam                   # Pfam-A.hmm for domain architecture
+```
+
+Downloads land in `~/.famscan/db` (or `$FAMSCAN_DB`, or `--dir`), and a DIAMOND
+or BLAST+ index is built when those tools are installed. After that, searches
+are local: thousands of sequences a minute, no queue, no rate limit, no network,
+and the same answer every time. `famscan start` offers the download when an
+input needs a database you don't have, and reuses one you already downloaded.
+
 ## Should BLAST go through the NCBI website in bulk?
 
 No. Driving the web form with many jobs is slow (each job queues for minutes),
@@ -95,8 +110,13 @@ heavy users get blocked), and breaks when the page changes.
 
 | Batch size | Use |
 |---|---|
-| 1-20 queries | `-e ncbi`: NCBI's official URL API, rate limited politely |
-| many queries or whole proteomes | download the database once and search locally (built-in engine, BLAST+ or DIAMOND): thousands of sequences a minute, no limits |
+| 1-20 queries | a web service: `-e ncbi` (official URL API), `-e ebi` (separate queue, usually quicker, needs a contact email) or `-e mmseqs` (seconds per query) |
+| many queries or whole proteomes | `famscan fetchdb swissprot` once, then search locally with the built-in engine, BLAST+ or DIAMOND |
+
+Every web service call has a time limit (`--set timeout=900` by default) and
+reports its job id if it runs out, so a job stuck in a queue can never hang a
+run. NCBI queues can reach 30 minutes at busy times; one local search of
+Swiss-Prot takes seconds.
 
 BLAST+ is US-government public-domain software and NCBI provides its
 databases for download precisely for large local jobs. UniProt data is CC BY

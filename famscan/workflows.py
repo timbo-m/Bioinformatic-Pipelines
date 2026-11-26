@@ -186,7 +186,8 @@ def st_homology(ctx: Ctx):
     q, t = ctx.p("query"), ctx.p("target")
     prog, eng = ctx.p("program", "auto"), ctx.p("engine", "builtin")
     hits = search.homology_search(q, t, program=prog, engine=eng, evalue=float(ctx.p("evalue", 1e-5)),
-                                  workdir=ctx.out, log=ctx.log)
+                                  workdir=ctx.out, email=ctx.p("email"),
+                                  timeout=float(ctx.p("timeout", 900)), log=ctx.log)
     df = pd.DataFrame([h.row() for h in hits])
     ctx.save("homology_hits.tsv", df)
     if len(df):
@@ -729,10 +730,14 @@ WORKFLOWS: dict[str, Workflow] = {w.key: w for w in [
               Param("target", "Target FASTA (protein or DNA), or a db name for engine ncbi/blast+", required=True),
               Param("program", "Program", "choice", default="auto",
                     choices=("auto", "blastp", "blastn", "blastx", "tblastn", "tblastx", "hmmsearch")),
-              Param("engine", "Engine", "choice", default="builtin", choices=("builtin", "blast+", "diamond", "ncbi")),
+              Param("engine", "Engine", "choice", default="builtin",
+                    choices=("builtin", "blast+", "diamond", "ncbi", "ebi", "mmseqs")),
+              Param("email", "Contact email (required by the EBI service only)", "str"),
+              Param("timeout", "Give up on a web service after this many seconds", "int", default=900),
               P_EVAL],
              ["homology", "report"],
-             "engine=ncbi uses NCBI's URL API: fine for a few queries; download databases for big jobs."),
+             "builtin needs no install and no network. ncbi/ebi/mmseqs are web services, fine for a few "
+             "queries; for big jobs run `famscan fetchdb swissprot` and search the file locally."),
 ]}
 
 
